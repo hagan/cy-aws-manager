@@ -32,19 +32,13 @@ jobs:
           keys-case: "bypass"
           log-variables: true
           export-variables: true
-      
-      - name: BUILD ENVIRONMENT
-        run: |
-          echo "DOCKER_DIR=$DOCKER_DIR"
-        env:
-          STEP_DEBUG: true
-      
+
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v2.8.0
         env:
           STEP_DEBUG: true
-      
+
       - name: Cache Docker layers
         uses: actions/cache@v2
         with:
@@ -79,10 +73,15 @@ jobs:
           echo "DOCKER_TAG=${{ env.DOCKER_TAG }}"
           echo "CONTEXT=${{ env.CONTEXT }}"
           echo "DOCKER_DIR=${{ env.DOCKER_DIR }}"
+          ls
+        env:
+          STEP_DEBUG: true
 
       - name: Build and push latest
         id: docker_build_latest
         uses: docker/build-push-action@v4.1.1
+        env:
+          STEP_DEBUG: true
         with:
           #! context: latest
           context: ${{ env.CONTEXT }}
