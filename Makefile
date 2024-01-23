@@ -13,29 +13,35 @@ DOCKERFILE := $(DOCKER_DIR)/Dockerfile
 all: build
 
 
-
+## issue -> docker pull harbor.cyverse.org/vice/$(DOCKER_IMAGE):$(DOCKER_TAG)
+## Currently using old appstreamer on harbor, need to move to amazonmgr
 # pull/push/login to harbor!
 .PHONY: harbor-pull
 harbor-pull:
 	@echo "Pulling package from harbor registry"
-	docker pull harbor.cyverse.org/vice/$(IMAGE_NAME):$(TAG)
+	docker pull harbor.cyverse.org/vice/appstream:latest
+
+## issue -> @echo "Running vice/$(IMAGE_NAME):$(TAG) image from harbor"
+## -e BEARER_TOKEN=$(BEARER_TOKEN)
+## -e APPSTREAM_STREAMING_URL=$(APPSTREAM_STREAMING_URL)
+## issue -> harbor.cyverse.org/vice/$(IMAGE_NAME):$(TAG)
 
 .PHONY: harbor-start
 harbor-start:
-	@echo "Running vice/$(IMAGE_NAME):$(TAG) image from harbor"
+	@echo "Running vice/appstream:latest image from harbor"
 	docker run \
 		-p 80:80 \
 		-p 8080:8080 \
 		-ti --init --rm \
-		--name $(IMAGE_NAME) \
-		-e BEARER_TOKEN=$(BEARER_TOKEN) \
-		-e APPSTREAM_STREAMING_URL=$(APPSTREAM_STREAMING_URL) \
-		harbor.cyverse.org/vice/$(IMAGE_NAME):$(TAG)
+		--name appstream \
+		harbor.cyverse.org/vice/appstream:latest
+
+## issue -> docker exec -it $(IMAGE_NAME) /bin/bash
 
 .PHONY: harbor-shell
 harbor-shell:
 	@echo "starting shell from running instance"
-	docker exec -it $(IMAGE_NAME) /bin/bash
+	docker exec -it appstream /bin/bash
 
 .PHONY: harbor-login
 harbor-login:
