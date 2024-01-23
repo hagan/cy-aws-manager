@@ -18,6 +18,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       
+      - name: Update submodules
+        run: |
+          git submodule update --init --recursive
+      
       - name: Load .env.docker file
         uses: falti/dotenv-action@v1.0.4
         with:
