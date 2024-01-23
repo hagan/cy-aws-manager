@@ -16,7 +16,10 @@ jobs:
     #!   PIP_WHEEL_FILENAME: 'appstreamer-0.1.1-py3-none-any.whl'
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+          ssh-key: ${{ secrets.ACCESS_KEY }}
       
       - name: Update submodules
         run: |
