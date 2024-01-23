@@ -61,14 +61,16 @@ jobs:
       #!     echo "PIP_WHEEL_FILENAME=$PIP_WHEEL_FILENAME"
       #!     set +a
 
+      #! removed from below
+      #!   echo "PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}"
+      #!   echo "APPSTREAM_LAMBDA_API=${{ env.APPSTREAM_LAMBDA_API }}"
+
       - name: Print environment variables
         run: |
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"
-          echo "TAG=${{ env.TAG }}"
+          echo "DOCKER_IMAGE=${{ env.DOCKER_IMAGE }}"
+          echo "DOCKER_TAG=${{ env.DOCKER_TAG }}"
           echo "CONTEXT=${{ env.CONTEXT }}"
           echo "DOCKER_DIR=${{ env.DOCKER_DIR }}"
-          echo "PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}"
-          echo "APPSTREAM_LAMBDA_API=${{ env.APPSTREAM_LAMBDA_API }}"
 
       - name: Build and push latest
         id: docker_build_latest
@@ -77,19 +79,21 @@ jobs:
           #! context: latest
           context: ${{ env.CONTEXT }}
           #! todo: simplfy path
-          file: src/vice/0.0.1/Dockerfile
+          file: ${{ env.DOCKER_DIR }}/Dockerfile
           builder: ${{ steps.buildx.outputs.name }}
           push: true
           platforms: linux/amd64,linux/arm64
+          #! how can we make appstream:latest change to our environment
           tags: harbor.cyverse.org/vice/appstream:latest
           build-args: |
-            IMAGE_NAME=${{ env.IMAGE_NAME }}
-            TAG=${{ env.TAG }}
+            DOCKER_IMAGE=${{ env.DOCKER_IMAGE }}
+            DOCKER_TAG=${{ env.DOCKER_TAG }}
             CONTEXT=${{ env.CONTEXT }}
             DOCKER_DIR=${{ env.DOCKER_DIR }}
-            PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}
-            APPSTREAM_API=${{ env.APPSTREAM_API }}
-            APPSTREAM_LAMBDA_ROOT_URL=${{ env.APPSTREAM_LAMBDA_ROOT_URL }}
+          #! removed
+          #! PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}
+          #! APPSTREAM_API=${{ env.APPSTREAM_API }}
+          #! APPSTREAM_LAMBDA_ROOT_URL=${{ env.APPSTREAM_LAMBDA_ROOT_URL }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
           
