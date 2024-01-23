@@ -1,0 +1,3 @@
+[submodule "src/vice"]
+	path = src/vice
+	url = git@github.com:hagan/cy-vice-aws-manager.git
