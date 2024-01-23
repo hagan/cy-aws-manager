@@ -33,9 +33,17 @@ jobs:
           log-variables: true
           export-variables: true
       
+      - name: BUILD ENVIRONMENT
+        run: |
+          echo "DOCKER_DIR=$DOCKER_DIR"
+        env:
+          STEP_DEBUG: true
+      
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v2.8.0
+        env:
+          STEP_DEBUG: true
       
       - name: Cache Docker layers
         uses: actions/cache@v2
