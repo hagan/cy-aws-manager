@@ -74,6 +74,10 @@ jobs:
           echo "CONTEXT=${{ env.CONTEXT }}"
           echo "DOCKER_DIR=${{ env.DOCKER_DIR }}"
           ls
+          ls ./src
+          ls ./src/vice
+          ls ./src/vice/latest
+          ls ./src/vice/latest/supervisord.conf
         env:
           STEP_DEBUG: true
 
