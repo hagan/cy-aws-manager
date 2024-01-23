@@ -40,8 +40,13 @@ harbor-start:
 
 .PHONY: harbor-shell
 harbor-shell:
-	@echo "starting shell from running instance"
-	docker exec -it appstream /bin/bash
+	@echo "Starting shell from running instance"
+	docker run --rm -it harbor.cyverse.org/vice/appstream:latest /bin/bash
+
+.PHONY: harbor-shell-noinstance
+harbor-shell-noinstance
+	@echo "Starting shell without instance"
+	docker run --rm -it --entrypoint /bin/bash harbor.cyverse.org/vice/appstream:latest
 
 .PHONY: harbor-login
 harbor-login:
