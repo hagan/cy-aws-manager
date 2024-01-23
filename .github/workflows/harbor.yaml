@@ -69,7 +69,8 @@ jobs:
         with:
           #! context: latest
           context: ${{ env.CONTEXT }}
-          file: latest/Dockerfile
+          #! todo: simplfy path
+          file: src/vice/0.0.1/Dockerfile
           builder: ${{ steps.buildx.outputs.name }}
           push: true
           platforms: linux/amd64,linux/arm64
