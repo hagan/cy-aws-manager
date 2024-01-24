@@ -1,3 +1,6 @@
 [submodule "src/vice"]
 	path = src/vice
 	url = git@github.com:hagan/cy-vice-aws-manager.git
+[submodule "src/flask"]
+	path = src/flask
+	url = git@github.com:hagan/cy-flask-aws-manager.git
