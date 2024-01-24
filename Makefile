@@ -33,6 +33,7 @@ harbor-start:
 	docker run \
 		-p 80:80 \
 		-p 8080:8080 \
+		-p 7681:7681 \
 		-ti --init --rm \
 		--name appstream \
 		harbor.cyverse.org/vice/appstream:latest
@@ -42,12 +43,12 @@ harbor-start:
 .PHONY: harbor-shell
 harbor-shell:
 	@echo "Starting shell from running instance"
-	docker run --rm -it harbor.cyverse.org/vice/appstream:latest /bin/bash
+	docker exec -it appstream /bin/bash
 
 .PHONY: harbor-shell-ni
 harbor-shell-ni:
 	@echo "Starting shell without instance"
-	docker run --rm -it --entrypoint /bin/bash harbor.cyverse.org/vice/appstream:latest
+	docker run --rm -it --entrypoint /bin/bash appstream
 
 .PHONY: harbor-login
 harbor-login:
