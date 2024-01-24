@@ -19,6 +19,7 @@ all: build
 .PHONY: harbor-pull
 harbor-pull:
 	@echo "Pulling package from harbor registry"
+	-docker rmi harbor.cyverse.org/vice/appstream:latest
 	docker pull harbor.cyverse.org/vice/appstream:latest
 
 ## issue -> @echo "Running vice/$(IMAGE_NAME):$(TAG) image from harbor"
@@ -44,7 +45,7 @@ harbor-shell:
 	docker run --rm -it harbor.cyverse.org/vice/appstream:latest /bin/bash
 
 .PHONY: harbor-shell-noinstance
-harbor-shell-noinstance
+harbor-shell-noinstance:
 	@echo "Starting shell without instance"
 	docker run --rm -it --entrypoint /bin/bash harbor.cyverse.org/vice/appstream:latest
 
