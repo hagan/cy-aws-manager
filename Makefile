@@ -33,7 +33,6 @@ harbor-start:
 	docker run \
 		-p 80:80 \
 		-p 8080:8080 \
-		-p 7681:7681 \
 		-ti --init --rm \
 		--name appstream \
 		harbor.cyverse.org/vice/appstream:latest
