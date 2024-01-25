@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+### Helper script to manage git commands in submodules
+### gf does git in the ./blah/blah/submodule direcctory
+
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+project_root="$(dirname "$script_dir")"
+
+function get_config_value {
+    make -f "$project_root/Makefile" -n -p | grep "^$1 =" | awk -F'= ' '{print $2}'
+}
+
+VICE_DIR=$(get_config_value VICE_DIR)
+
+
+[ "x$VICE_DIR" != "x" ] && [ -d $VICE_DIR ] && cd $VICE_DIR && git "$@"
