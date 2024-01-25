@@ -25,10 +25,10 @@ jobs:
         run: |
           git submodule update --init --recursive
       
-      - name: Load .env.docker file
+      - name: Load config.mk file
         uses: falti/dotenv-action@v1.0.4
         with:
-          path: .env.docker
+          path: config.mk
           keys-case: "bypass"
           log-variables: true
           export-variables: true
