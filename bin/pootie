@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+### Helper script to manage poetry commands in submodules
+### poetry does git in the ./blah/blah/submodule direcctory
+
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+project_root="$(dirname "$script_dir")"
+
+function get_config_value {
+    make -f "$project_root/Makefile" -n -p | grep "^$1 =" | awk -F'= ' '{print $2}'
+}
+
+FLASK_DIR=$(get_config_value FLASK_DIR)
+
+
+[ "x$FLASK_DIR" != "x" ] && [ -d $FLASK_DIR ] && cd $FLASK_DIR  && FLASK_APP='awsmgr.app' poetry "$@"

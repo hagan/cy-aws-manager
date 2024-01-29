@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+### Helper script to manage poetry commands in submodules
+### poetry does git in the ./blah/blah/submodule direcctory
+
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+project_root="$(dirname "$script_dir")"
+
+function get_config_value {
+    make -f "$project_root/Makefile" -n -p | grep "^$1 =" | awk -F'= ' '{print $2}'
+}
+
+# poetry config virtualenvs.path 
+# /Users/hagan/Library/Caches/pypoetry/virtualenvs
+# poetry env info --path
+# /Users/hagan/Library/Caches/pypoetry/virtualenvs/awsmgr-B1CvXGRn-py3.11 + /bin/activate
+
+FLASK_DIR=$(get_config_value FLASK_DIR)
+# run /bin/bash -c 'eval $(direnv export bash); /bin/bash'
+# [ "x$FLASK_DIR" != "x" ] && \
+# [ -d $FLASK_DIR ] && \
+#   cd $FLASK_DIR && \
+#   eval $(direnv export bash) && \
+#   FLASK_APP='awsmgr.app' poetry shell
+if [[ -d $(realpath "$FLASK_DIR") ]] || [[ -L $(realpath "$FLASK_DIR") ]]; then
+    $SHELL -c "cd $(realpath $FLASK_DIR) && exec $SHELL -l"
+else
+    echo "ERROR: $(realpath $FLASK_DIR) directory does not exist";
+    exit 1
+fi

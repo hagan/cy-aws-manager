@@ -21,6 +21,7 @@ compile:
 	NODE_ENV=production ./node_modules/.bin/webpack --progress --color --optimization-minimize && \
 	poetry run flask digest compile && \
 	touch ./awsmgr/__init__.py && \
+	poetry build && \
 	ls -lhtp ./dist/*.whl | head -n1 | awk '{print $$9, $$5}'
 
 .PHONY: build
@@ -52,7 +53,7 @@ start:
 .PHONY: shell
 shell:
 	@echo "Running Docker $(DOCKER_IMAGE):$(DOCKER_TAG)  bash shell"
-	docker exec -it $(DOCKER_IMAGE) /bin/bash
+	docker exec -it $(DOCKER_IMAGE) /bin/sh
 
 .PHONY: clean
 clean:
