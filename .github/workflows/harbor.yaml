@@ -73,6 +73,8 @@ jobs:
           echo "DOCKER_TAG=${{ env.DOCKER_TAG }}"
           echo "CONTEXT=${{ env.CONTEXT }}"
           echo "DOCKER_DIR=${{ env.DOCKER_DIR }}"
+          echo "SRC_DOCKER_IMAGE=${{ env.SRC_DOCKER_IMAGE }}"
+          echo "SRC_DOCKER_VER=${{ env.SRC_DOCKER_VER }}"
           ls -lah ./src/vice/latest
         env:
           STEP_DEBUG: true
@@ -97,6 +99,8 @@ jobs:
             DOCKER_TAG=${{ env.DOCKER_TAG }}
             CONTEXT=${{ env.CONTEXT }}
             DOCKER_DIR=${{ env.DOCKER_DIR }}
+            SRC_DOCKER_IMAGE=${{ env.SRC_DOCKER_IMAGE }}
+            SRC_DOCKER_VER=${{ env.SRC_DOCKER_VER }}
           #! removed
           #! PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}
           #! APPSTREAM_API=${{ env.APPSTREAM_API }}
