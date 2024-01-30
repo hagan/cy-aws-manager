@@ -1,4 +1,6 @@
 COMMENT ?= 'fixup'
+SRC_DOCKER_IMAGE ?= 'hagan/awsmgr'
+SRC_DOCKER_VER ?= 'v0.0.3'
 
 # paths to build our "latest" docker image
 DOCKER_IMAGE=viceamazonmgr

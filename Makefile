@@ -27,16 +27,20 @@ compile:
 .PHONY: build
 build:
 	@echo "Building Docker image..."
+	docker pull $(SRC_DOCKER_IMAGE):$(SRC_DOCKER_VER)
 	docker image build \
 		--progress=plain \
 		-f $(DOCKERFILE) \
 		-t $(DOCKER_IMAGE):$(DOCKER_TAG) \
 		--no-cache \
+		--build-arg SRC_DOCKER_IMAGE=$(SRC_DOCKER_IMAGE) \
+		--build-arg SRC_DOCKER_VER=$(SRC_DOCKER_VER) \
 		--build-arg IMAGE_NAME=$(DOCKER_IMAGE) \
 		--build-arg TAG=$(DOCKER_TAG) \
 		--build-arg DOCKER_DIR=$(DOCKER_DIR) \
 		$(CONTEXT)
 
+#  		--env "NODE_SOCK=/tmp/node-nextjs.socket"
 .PHONY: start
 start:
 	@echo "Starting Docker container..."
