@@ -43,10 +43,10 @@ jobs:
           . ./extract-vars.sh config.mk
 
       - name: Show exported variables from config.mk
-      run: |
-        echo "Extracted vars from config.mk..."
-        echo "    SRC_DOCKER_IMAGE: $SRC_DOCKER_IMAGE == ${{ steps.vars.outputs.SRC_DOCKER_IMAGE}} == ${{ env.SRC_DOCKER_IMAGE}}"
-        echo "    SRC_DOCKER_VER: $SRC_DOCKER_VER == ${{ steps.vars.outputs.SRC_DOCKER_VER}} == ${{ env.SRC_DOCKER_VER}}"
+        run: |
+          echo "Extracted vars from config.mk..."
+          echo "    SRC_DOCKER_IMAGE: $SRC_DOCKER_IMAGE == ${{ steps.vars.outputs.SRC_DOCKER_IMAGE}} == ${{ env.SRC_DOCKER_IMAGE}}"
+          echo "    SRC_DOCKER_VER: $SRC_DOCKER_VER == ${{ steps.vars.outputs.SRC_DOCKER_VER}} == ${{ env.SRC_DOCKER_VER}}"
 
       - name: Set up Docker Buildx
         id: buildx
