@@ -61,13 +61,13 @@ jobs:
           echo "            VICE_DIR: ${{ steps.vars.outputs.VICE_DIR}}"
           echo "             NVM_DIR: ${{ steps.vars.outputs.NVM_DIR}}"
           echo "             CONTEXT: ${{ steps.vars.outputs.CONTEXT}}"
-          echo "  PIP_WHEEL_FILENAME: ${{ steps.vars.outpus.PIP_WHEEL_FILENAME }}"
+          echo "  PIP_WHEEL_FILENAME: ${{ steps.vars.outputs.PIP_WHEEL_FILENAME }}"
 
       - name: Copy whl from our submodule dist tracked in LFS
         id: flaskwheel
         run: |
           mkdir -p ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/
-          cp ${{ steps.vars.outputs.FLASK_DIR}}/dist/${{ steps.vars.outpus.PIP_WHEEL_FILENAME }} ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/.
+          cp ${{ steps.vars.outputs.FLASK_DIR}}/dist/${{ steps.vars.outputs.PIP_WHEEL_FILENAME }} ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/.
           ls -lah ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask
 
       - name: Set up Docker Buildx
