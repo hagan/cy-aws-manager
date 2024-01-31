@@ -122,8 +122,8 @@ jobs:
             DOCKER_TAG=${{ steps.vars.outputs.DOCKER_TAG }}
             CONTEXT=${{ steps.vars.outputs.CONTEXT }}
             DOCKER_DIR=${{ steps.vars.outputs.DOCKER_DIR }}
-            SRC_DOCKER_IMAGE="${{ steps.vars.outputs.SRC_DOCKER_IMAGE}}"
-            SRC_DOCKER_VER="${{ steps.vars.outputs.SRC_DOCKER_VER}}"
+            SRC_DOCKER_IMAGE=${{ steps.vars.outputs.SRC_DOCKER_IMAGE}}
+            SRC_DOCKER_VER=${{ steps.vars.outputs.SRC_DOCKER_VER}}
           #! removed
           #! PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}
           #! APPSTREAM_API=${{ env.APPSTREAM_API }}
