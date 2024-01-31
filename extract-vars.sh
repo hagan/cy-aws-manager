@@ -14,9 +14,11 @@ fi
 ENV_VARS=($(awk '!/^#/ && NF' $1 | awk -F '[ =]' '{if (NF > 0) print $1}' | tr '\n' ' '))
 
 for elm in "${ENV_VARS[@]}"; do
-  elm_val=$(make -f Makefile --include config.mk -p -n | grep "^$elm.*=" | awk -F'=' '{ gsub(/^[ \t]+/, "", $2); print $2 }')
-  declare "$elm=$elm_val"
-  export "$elm"
+  # | awk -F'=' '{ gsub(/^[ \t]+/, "", $2); print $2 }'
+#   elm_val=$(make -f Makefile --include config.mk -p -n | grep "^$elm.*=")
+#   echo $elm_val
+#   echo  declare "$elm=$elm_val"
+#   export "$elm"
   ## deprecated set-out -> now just pipe it
   # echo "::set-output name=$elm::$elm_val"
   echo "${elm}=${elm_val}" >> $GITHUB_OUTPUT
