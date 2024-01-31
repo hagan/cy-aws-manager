@@ -2,17 +2,19 @@ name: harbor
 
 on:
   push:
-    branches: main
+    branches:
+      - main
 
 jobs:
+
   build:
     runs-on: ubuntu-latest
-    # env:
-    #   IMAGE_NAME: 'appstream'
-    #   TAG: 'latest'
-    #   DOCKER_DIR: '.'
-    #   CONTEXT: '.'
-    #   PIP_WHEEL_FILENAME: 'appstreamer-0.1.1-py3-none-any.whl'
+    #! env:
+    #!   IMAGE_NAME: 'appstream'
+    #!   TAG: 'latest'
+    #!   DOCKER_DIR: '.'
+    #!   CONTEXT: '.'
+    #!   PIP_WHEEL_FILENAME: 'appstreamer-0.1.1-py3-none-any.whl'
     steps:
       - name: Checkout
         uses: actions/checkout@v3
