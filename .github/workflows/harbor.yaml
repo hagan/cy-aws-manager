@@ -121,7 +121,7 @@ jobs:
           DOCKER_DIR: ${{ steps.vars.outputs.DOCKER_DIR }}
         run: |
           echo "Checking DOCKER_DIR: $DOCKER_DIR"
-          ls -lah $DOCKER_DIR
+          ls -lah $DOCKER_DIR/dist/flask
 
       - name: Build and push latest
         id: docker_build_latest
