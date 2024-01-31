@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # Exports variables for a Makefile configuration (config.mk)
+
+# TODO: need to remove quotes (" & ') from Vars? maybe...
 if [ -z "$1" ]; then
     echo "Usage: $0 filename"
     exit 1
