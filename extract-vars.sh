@@ -30,10 +30,10 @@ for elm in "${ENV_VARS[@]}"; do
     awk -F'[[:space:]]*=[[:space:]]*' '{print $NF}' \
   )
   if $DEBUG_OUTPUT; then
-    echo "${elm}=${elm_val}"
+    echo "DEBUG: ${elm}=${elm_val}"
   else
-    declare "$elm=$elm_val"
-    export "$elm"
+    declare $elm=$elm_val
+    export $elm
     ## deprecated set-out -> now just pipe it
     # echo "::set-output name=$elm::$elm_val"
     echo "${elm}=${elm_val}" >> $GITHUB_OUTPUT
