@@ -21,17 +21,31 @@ jobs:
           submodules: 'true'
           ssh-key: ${{ secrets.ACCESS_KEY }}
       
+      - name: Install Make
+        run: sudo apt-get update && sudo apt-get install -y make
+
       - name: Update submodules
         run: |
           git submodule update --init --recursive
       
-      - name: Load config.mk file
-        uses: falti/dotenv-action@v1.0.4
-        with:
-          path: config.mk
-          keys-case: "bypass"
-          log-variables: true
-          export-variables: true
+      # - name: Load config.mk file
+      #   uses: falti/dotenv-action@v1.0.4
+      #   with:
+      #     path: config.mk
+      #     keys-case: "bypass"
+      #     log-variables: true
+      #     export-variables: true
+
+      - name: Extract Variables from config.mk
+        id: vars
+        run: |
+          . ./extract-vars.sh config.mk
+
+      - name: Show exported variables from config.mk
+      run: |
+        echo "Extracted vars from config.mk..."
+        echo "    SRC_DOCKER_IMAGE: $SRC_DOCKER_IMAGE == ${{ steps.vars.outputs.SRC_DOCKER_IMAGE}} == ${{ env.SRC_DOCKER_IMAGE}}"
+        echo "    SRC_DOCKER_VER: $SRC_DOCKER_VER == ${{ steps.vars.outputs.SRC_DOCKER_VER}} == ${{ env.SRC_DOCKER_VER}}"
 
       - name: Set up Docker Buildx
         id: buildx
@@ -73,8 +87,8 @@ jobs:
           echo "DOCKER_TAG=${{ env.DOCKER_TAG }}"
           echo "CONTEXT=${{ env.CONTEXT }}"
           echo "DOCKER_DIR=${{ env.DOCKER_DIR }}"
-          echo "SRC_DOCKER_IMAGE=${{ env.SRC_DOCKER_IMAGE }}"
-          echo "SRC_DOCKER_VER=${{ env.SRC_DOCKER_VER }}"
+          echo "SRC_DOCKER_IMAGE=${{ steps.vars.outputs.SRC_DOCKER_IMAGE}}"
+          echo "SRC_DOCKER_VER=${{ steps.vars.outputs.SRC_DOCKER_VER}}"
           ls -lah ./src/vice/latest
         env:
           STEP_DEBUG: true
@@ -99,8 +113,8 @@ jobs:
             DOCKER_TAG=${{ env.DOCKER_TAG }}
             CONTEXT=${{ env.CONTEXT }}
             DOCKER_DIR=${{ env.DOCKER_DIR }}
-            SRC_DOCKER_IMAGE="${{ env.SRC_DOCKER_IMAGE }}"
-            SRC_DOCKER_VER=${{ env.SRC_DOCKER_VER }}
+            SRC_DOCKER_IMAGE="${{ steps.vars.outputs.SRC_DOCKER_IMAGE}}"
+            SRC_DOCKER_VER="${{ steps.vars.outputs.SRC_DOCKER_VER}}"
           #! removed
           #! PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}
           #! APPSTREAM_API=${{ env.APPSTREAM_API }}
