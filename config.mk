@@ -1,4 +1,5 @@
 COMMENT ?= 'fixup'
+## NOTE: These are also located in the github/actions Repository variables!
 SRC_DOCKER_IMAGE ?= 'hagan/awsmgr'
 SRC_DOCKER_VER ?= 'v0.0.3'
 

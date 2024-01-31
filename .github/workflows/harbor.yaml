@@ -99,7 +99,7 @@ jobs:
             DOCKER_TAG=${{ env.DOCKER_TAG }}
             CONTEXT=${{ env.CONTEXT }}
             DOCKER_DIR=${{ env.DOCKER_DIR }}
-            SRC_DOCKER_IMAGE=${{ env.SRC_DOCKER_IMAGE }}
+            SRC_DOCKER_IMAGE="${{ env.SRC_DOCKER_IMAGE }}"
             SRC_DOCKER_VER=${{ env.SRC_DOCKER_VER }}
           #! removed
           #! PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}
