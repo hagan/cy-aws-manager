@@ -15,7 +15,7 @@ VICE_DIR=./src/vice
 
 CONTEXT=.
 
-# PIP_WHEEL_FILENAME='awsmgr-0.1.1-py3-none-any.whl'
+PIP_WHEEL_FILENAME='awsmgr-0.1.1-py3-none-any.whl'
 # APPSTREAM_API='/api/v1/appstream'
 # APPSTREAM_LAMBDA_ROOT_URL=''
 # STATIC_ROOT='/var/www/static'

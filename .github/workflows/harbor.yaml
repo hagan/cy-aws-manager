@@ -50,17 +50,25 @@ jobs:
       - name: Show exported variables from config.mk
         run: |
           echo "Extracted vars from config.mk..."
-          echo "    COMMENT: $COMMENT == ${{ steps.vars.outputs.COMMENT}} == ${{ env.COMMENT}}"
-          echo "    SRC_DOCKER_IMAGE: $SRC_DOCKER_IMAGE == ${{ steps.vars.outputs.SRC_DOCKER_IMAGE}} == ${{ env.SRC_DOCKER_IMAGE}}"
-          echo "    SRC_DOCKER_VER: $SRC_DOCKER_VER == ${{ steps.vars.outputs.SRC_DOCKER_VER}} == ${{ env.SRC_DOCKER_VER}}"
-          echo "    DOCKER_IMAGE: $DOCKER_IMAGE == ${{ steps.vars.outputs.DOCKER_IMAGE}} == ${{ env.DOCKER_IMAGE}}"
-          echo "    DOCKER_TAG: $DOCKER_TAG == ${{ steps.vars.outputs.DOCKER_TAG}} == ${{ env.DOCKER_TAG}}"
-          echo "    DOCKER_DIR: $DOCKER_DIR == ${{ steps.vars.outputs.DOCKER_DIR}} == ${{ env.DOCKER_DIR}}"
-          echo "    FLASK_DIR: $FLASK_DIR == ${{ steps.vars.outputs.FLASK_DIR}} == ${{ env.FLASK_DIR}}"
-          echo "    NODE_DIR: $NODE_DIR == ${{ steps.vars.outputs.NODE_DIR}} == ${{ env.NODE_DIR}}"
-          echo "    VICE_DIR: $VICE_DIR == ${{ steps.vars.outputs.VICE_DIR}} == ${{ env.VICE_DIR}}"
-          echo "    NVM_DIR: $NVM_DIR == ${{ steps.vars.outputs.NVM_DIR}} == ${{ env.NVM_DIR}}"
-          echo "    CONTEXT: $CONTEXT == ${{ steps.vars.outputs.CONTEXT}} == ${{ env.CONTEXT}}"
+          echo "             COMMENT: ${{ steps.vars.outputs.COMMENT}}"
+          echo "    SRC_DOCKER_IMAGE: ${{ steps.vars.outputs.SRC_DOCKER_IMAGE }}"
+          echo "      SRC_DOCKER_VER: ${{ steps.vars.outputs.SRC_DOCKER_VER }}"
+          echo "        DOCKER_IMAGE: ${{ steps.vars.outputs.DOCKER_IMAGE }}"
+          echo "          DOCKER_TAG: ${{ steps.vars.outputs.DOCKER_TAG }}"
+          echo "          DOCKER_DIR: ${{ steps.vars.outputs.DOCKER_DIR }}"
+          echo "           FLASK_DIR: ${{ steps.vars.outputs.FLASK_DIR}}"
+          echo "            NODE_DIR: ${{ steps.vars.outputs.NODE_DIR}}"
+          echo "            VICE_DIR: ${{ steps.vars.outputs.VICE_DIR}}"
+          echo "             NVM_DIR: ${{ steps.vars.outputs.NVM_DIR}}"
+          echo "             CONTEXT: ${{ steps.vars.outputs.CONTEXT}}"
+          echo "  PIP_WHEEL_FILENAME: ${{ steps.vars.outpus.PIP_WHEEL_FILENAME }}"
+
+      - name: Copy whl from our submodule dist tracked in LFS
+        id: flaskwheel
+        run: |
+          mkdir -p ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/
+          cp ${{ steps.vars.outputs.FLASK_DIR}}/dist/${{ steps.vars.outpus.PIP_WHEEL_FILENAME }} ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/.
+          ls -lah ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask
 
       - name: Set up Docker Buildx
         id: buildx
