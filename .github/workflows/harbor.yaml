@@ -115,6 +115,14 @@ jobs:
         env:
           STEP_DEBUG: true
 
+      - name: Verify we have our wheel in our vice app dist folder
+        id: verify_things_are_as_they_should_be
+        env:
+          DOCKER_DIR: ${{ steps.vars.outputs.DOCKER_DIR }}
+        run: |
+          echo "Checking DOCKER_DIR: $DOCKER_DIR"
+          ls -lah $DOCKER_DIR
+
       - name: Build and push latest
         id: docker_build_latest
         uses: docker/build-push-action@v4.1.1
