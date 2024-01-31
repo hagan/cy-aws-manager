@@ -9,6 +9,7 @@ DOCKER_IMAGE=viceamazonmgr
 DOCKER_TAG=0.0.1
 DOCKER_DIR=./src/vice/0.0.1
 FLASK_DIR=./src/flask
+NODE_DIR=./src/ui
 VICE_DIR=./src/vice
 NVM_DIR=${HOME}/.nvm
 

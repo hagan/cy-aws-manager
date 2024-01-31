@@ -12,5 +12,7 @@ for elm in "${ENV_VARS[@]}"; do
   elm_val=$(make -f Makefile --include config.mk -p -n | grep "^$elm.*=")
   declare "$elm=$elm_val"
   export "$elm"
-  echo "::set-output name=$elm::$elm_val"
+  ## deprecated set-out -> now just pipe it
+#   echo "::set-output name=$elm::$elm_val"
+  echo "${elm}=${elm_val}" >> $GITHUB_OUTPUT
 done

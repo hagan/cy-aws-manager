@@ -45,8 +45,17 @@ jobs:
       - name: Show exported variables from config.mk
         run: |
           echo "Extracted vars from config.mk..."
+          echo "    COMMENT: $COMMENT == ${{ steps.vars.outputs.COMMENT}} == ${{ env.COMMENT}}"
           echo "    SRC_DOCKER_IMAGE: $SRC_DOCKER_IMAGE == ${{ steps.vars.outputs.SRC_DOCKER_IMAGE}} == ${{ env.SRC_DOCKER_IMAGE}}"
           echo "    SRC_DOCKER_VER: $SRC_DOCKER_VER == ${{ steps.vars.outputs.SRC_DOCKER_VER}} == ${{ env.SRC_DOCKER_VER}}"
+          echo "    DOCKER_IMAGE: $DOCKER_IMAGE == ${{ steps.vars.outputs.DOCKER_IMAGE}} == ${{ env.DOCKER_IMAGE}}"
+          echo "    DOCKER_TAG: $DOCKER_TAG == ${{ steps.vars.outputs.DOCKER_TAG}} == ${{ env.DOCKER_TAG}}"
+          echo "    DOCKER_DIR: $DOCKER_DIR == ${{ steps.vars.outputs.DOCKER_DIR}} == ${{ env.DOCKER_DIR}}"
+          echo "    FLASK_DIR: $FLASK_DIR == ${{ steps.vars.outputs.FLASK_DIR}} == ${{ env.FLASK_DIR}}"
+          echo "    NODE_DIR: $NODE_DIR == ${{ steps.vars.outputs.NODE_DIR}} == ${{ env.NODE_DIR}}"
+          echo "    VICE_DIR: $VICE_DIR == ${{ steps.vars.outputs.VICE_DIR}} == ${{ env.VICE_DIR}}"
+          echo "    NVM_DIR: $NVM_DIR == ${{ steps.vars.outputs.NVM_DIR}} == ${{ env.NVM_DIR}}"
+          echo "    CONTEXT: $CONTEXT == ${{ steps.vars.outputs.CONTEXT}} == ${{ env.CONTEXT}}"
 
       - name: Set up Docker Buildx
         id: buildx
@@ -84,13 +93,12 @@ jobs:
 
       - name: Print environment variables
         run: |
-          echo "DOCKER_IMAGE=${{ env.DOCKER_IMAGE }}"
-          echo "DOCKER_TAG=${{ env.DOCKER_TAG }}"
-          echo "CONTEXT=${{ env.CONTEXT }}"
-          echo "DOCKER_DIR=${{ env.DOCKER_DIR }}"
+          echo "DOCKER_IMAGE=${{ steps.vars.outputs.DOCKER_IMAGE }}"
+          echo "DOCKER_TAG=${{ steps.vars.outputs.DOCKER_TAG }}"
+          echo "CONTEXT=${{ steps.vars.outputs.CONTEXT }}"
+          echo "DOCKER_DIR=${{ steps.vars.outputs.DOCKER_DIR }}"
           echo "SRC_DOCKER_IMAGE=${{ steps.vars.outputs.SRC_DOCKER_IMAGE}}"
           echo "SRC_DOCKER_VER=${{ steps.vars.outputs.SRC_DOCKER_VER}}"
-          ls -lah ./src/vice/latest
         env:
           STEP_DEBUG: true
 
@@ -101,19 +109,19 @@ jobs:
           STEP_DEBUG: true
         with:
           #! context: latest
-          context: ${{ env.CONTEXT }}
+          context: ${{ steps.vars.outputs.CONTEXT }}
           #! todo: simplfy path
-          file: ${{ env.DOCKER_DIR }}/Dockerfile
+          file: ${{ steps.vars.outputs.DOCKER_DIR }}/Dockerfile
           builder: ${{ steps.buildx.outputs.name }}
           push: true
           platforms: linux/amd64,linux/arm64
           #! how can we make appstream:latest change to our environment
           tags: harbor.cyverse.org/vice/appstream:latest
           build-args: |
-            DOCKER_IMAGE=${{ env.DOCKER_IMAGE }}
-            DOCKER_TAG=${{ env.DOCKER_TAG }}
-            CONTEXT=${{ env.CONTEXT }}
-            DOCKER_DIR=${{ env.DOCKER_DIR }}
+            DOCKER_IMAGE=${{ steps.vars.outputs.DOCKER_IMAGE }}
+            DOCKER_TAG=${{ steps.vars.outputs.DOCKER_TAG }}
+            CONTEXT=${{ steps.vars.outputs.CONTEXT }}
+            DOCKER_DIR=${{ steps.vars.outputs.DOCKER_DIR }}
             SRC_DOCKER_IMAGE="${{ steps.vars.outputs.SRC_DOCKER_IMAGE}}"
             SRC_DOCKER_VER="${{ steps.vars.outputs.SRC_DOCKER_VER}}"
           #! removed
