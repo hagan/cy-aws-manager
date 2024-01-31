@@ -2,6 +2,13 @@
 
 version: 0.0.1
 
+#### Git submodules/HOWTO
+
+To clone repo:
+```
+  git clone --recurse-submodules <repo url>
+```
+
 #### Simplify C&C of AWS resources
 
 4 elements of project

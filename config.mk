@@ -11,7 +11,7 @@ DOCKER_DIR=./src/vice/0.0.1
 FLASK_DIR=./src/flask
 NODE_DIR=./src/ui
 VICE_DIR=./src/vice
-NVM_DIR=${HOME}/.nvm
+# NVM_DIR=${HOME}/.nvm
 
 CONTEXT=.
 

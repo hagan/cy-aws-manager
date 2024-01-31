@@ -1,25 +1,41 @@
 #!/bin/bash
 
-# Exports variables for a Makefile configuration (config.mk)
-
 if [ -z "$1" ]; then
-    echo "Usage: $0 filename"
-    exit 1
+  filename='config.mk'
+else
+  filename=$1
+fi
+
+if ! test -f $filename; then
+  echo "Error missing '$filename'!"
+  exit 1
 fi
 
 if [ "x${GITHUB_OUTPUT}" == "x" ]; then
-  GITHUB_OUTPUT=/dev/null
+  DEBUG_OUTPUT=true
 fi
 
-ENV_VARS=($(awk '!/^#/ && NF' $1 | awk -F '[ =]' '{if (NF > 0) print $1}' | tr '\n' ' '))
+## Output the makefile config/settings/etc...
+# make -f Makefile -n -p | awk '!/^#/ && NF'
+
+ENV_VARS=( \
+  $(awk -F'[[:space:]]*[:?]?=' '/^[^#]/ && NF>1 {print $1}' $filename | \
+    tr '\n' ' ') \
+  )
 
 for elm in "${ENV_VARS[@]}"; do
-  # | awk -F'=' '{ gsub(/^[ \t]+/, "", $2); print $2 }'
-#   elm_val=$(make -f Makefile --include config.mk -p -n | grep "^$elm.*=")
-#   echo $elm_val
-#   echo  declare "$elm=$elm_val"
-#   export "$elm"
-  ## deprecated set-out -> now just pipe it
-  # echo "::set-output name=$elm::$elm_val"
-  echo "${elm}=${elm_val}" >> $GITHUB_OUTPUT
+  elm_val=$( \
+    make -f Makefile --include $filename -p -n | \
+    grep "^$elm.*=" | \
+    awk -F'[[:space:]]*=[[:space:]]*' '{print $NF}' \
+  )
+  if $DEBUG_OUTPUT; then
+    echo "${elm}=${elm_val}"
+  else
+    declare "$elm=$elm_val"
+    export "$elm"
+    ## deprecated set-out -> now just pipe it
+    # echo "::set-output name=$elm::$elm_val"
+    echo "${elm}=${elm_val}" >> $GITHUB_OUTPUT
+  fi
 done

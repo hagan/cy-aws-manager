@@ -1,11 +1,12 @@
 name: harbor
 
 on:
-  push:
-    branches-ignore:
-      - main
-    # branches:
-      # - main
+  workflow_dispatch:
+  # push:
+  # branches-ignore:
+  #   - main
+  # branches:
+    # - main
 
 jobs:
 
