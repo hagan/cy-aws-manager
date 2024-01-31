@@ -27,8 +27,14 @@ for elm in "${ENV_VARS[@]}"; do
   elm_val=$( \
     make -f Makefile --include $filename -p -n | \
     grep "^$elm.*=" | \
-    awk -F'[[:space:]]*=[[:space:]]*' '{print $NF}' \
+    awk -F'[[:space:]]*=[[:space:]]*' '{print $NF}'
   )
+  if [[ ! $elm_val =~ [[:space:]] ]]; then
+    elm_val="${elm_val%\"}"
+    elm_val="${elm_val#\"}"
+    elm_val="${elm_val%\'}"
+    elm_val="${elm_val#\'}"
+  fi
   if [[ "$DEBUG_OUTPUT" == "true" ]]; then
     echo "DEBUG: ${elm}=${elm_val}"
   else
