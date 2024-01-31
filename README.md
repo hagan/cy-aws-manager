@@ -17,6 +17,8 @@ $ brew install git-lfs
 Linux/Debian
 $ apt install git-lfs
 
+And you do not need to run `git lfs install` as hooks are already in .git/hook or .husky folders.
+
 #### Simplify C&C of AWS resources
 
 4 elements of project

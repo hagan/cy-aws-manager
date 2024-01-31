@@ -35,7 +35,6 @@ jobs:
 
       - name: Set up Git LFS
         run: |
-          git lfs install
           git lfs pull
           ls -lah ./src/vice/0.0.0/dist
 
