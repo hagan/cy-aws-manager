@@ -26,11 +26,13 @@ jobs:
           ssh-key: ${{ secrets.ACCESS_KEY }}
       
       - name: Install Make
-        run: sudo apt-get update && sudo apt-get install -y make
+        run: sudo apt-get update && sudo apt-get install -y make git-lfs
 
       - name: Update submodules
         run: |
           git submodule update --init --recursive
+          git lfs install
+          git lfs pull
       
       # - name: Load config.mk file
       #   uses: falti/dotenv-action@v1.0.4

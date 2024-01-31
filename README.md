@@ -9,6 +9,14 @@ To clone repo:
   git clone --recurse-submodules <repo url>
 ```
 
+#### Git LFS
+
+MacOS/OSX
+$ brew install git-lfs
+
+Linux/Debian
+$ apt install git-lfs
+
 #### Simplify C&C of AWS resources
 
 4 elements of project
