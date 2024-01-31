@@ -11,7 +11,7 @@ if ! test -f $filename; then
   exit 1
 fi
 
-if [ "x${GITHUB_OUTPUT}" == "x" ]; then
+if [ -z "${GITHUB_OUTPUT}" ]; then
   DEBUG_OUTPUT=true
 fi
 
@@ -29,7 +29,7 @@ for elm in "${ENV_VARS[@]}"; do
     grep "^$elm.*=" | \
     awk -F'[[:space:]]*=[[:space:]]*' '{print $NF}' \
   )
-  if $DEBUG_OUTPUT; then
+  if [[ "$DEBUG_OUTPUT" == "true" ]]; then
     echo "DEBUG: ${elm}=${elm_val}"
   else
     declare $elm=$elm_val
