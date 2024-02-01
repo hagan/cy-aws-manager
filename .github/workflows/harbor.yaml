@@ -127,7 +127,7 @@ jobs:
         run: |
           test -d ./src/flask && test -d ./src/flask/dist && ls ./src/flask/dist
           test -d ./src/flask && test -d ./src/ui/dist && ls ./src/ui/dist
-          test -d ./src/vice && test -d ./src/vice/latest && ls ./src/vice/lateest
+          test -d ./src/vice && test -d ./src/vice/latest && ls ./src/vice/latest
 
       - name: Build and push latest
         id: docker_build_latest
