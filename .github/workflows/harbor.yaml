@@ -125,13 +125,9 @@ jobs:
         env:
           DOCKER_DIR: ${{ steps.vars.outputs.DOCKER_DIR }}
         run: |
-          git lfs install
-          git lfs pull
-          cd ./src/vice && git lfs pull
-          cd ./src/ul && git lfs pull
-          cd ./src/flask && git lfs pull
-          echo "Checking DOCKER_DIR: $DOCKER_DIR"
-          ls -lah $DOCKER_DIR/dist/flask
+          test -d ./src/flask && test -d ./src/flask/dist && ls ./src/flask/dist
+          test -d ./src/flask && test -d ./src/ui/dist && ls ./src/ui/dist
+          test -d ./src/vice && test -d ./src/vice/latest && ls ./src/vice/lateest
 
       - name: Build and push latest
         id: docker_build_latest
