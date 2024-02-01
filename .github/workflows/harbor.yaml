@@ -36,7 +36,8 @@ jobs:
       - name: Set up Git LFS
         run: |
           git lfs pull
-          ls -lah ./src/vice/0.0.0/dist
+          ls -lah ./src/flask/dist
+          ls -lah ./src/ui/dist
 
       # - name: Load config.mk file
       #   uses: falti/dotenv-action@v1.0.4
