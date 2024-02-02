@@ -29,13 +29,14 @@ And you do not need to run `git lfs install` as hooks are already in .git/hook o
 
 #### Create images for hub
 
-Warning this takes time to compile, 6+ hours. Only needed once, use hub.docker.com instead
+~Warning this takes time to compile, 6+ hours. Only needed once, use hub.docker.com instead
+Note: Now awsmgr takes about 30mins... After modifying pynode/pulumi to take less time, taking longer to build the image, dunno why
 
     1) adjust config.mk to reflect docker hub user etc...
-    2) make NOCACHE=yes DOCKERHUB=yes build-pynode-image
-    3) make NOCACHE=yes DOCKERHUB=yes build-pulumi-image
-    4) make NOCACHE=yes DOCKERHUB=yes build-awsmgr-image
-    5) make NOCACHE=yes DOCKERHUB=yes build-vice-image
+    2) $ make NOCACHE=yes DOCKERHUB=yes build-pynode-image
+    3) $ make NOCACHE=yes DOCKERHUB=yes build-pulumi-image
+    4) $ make NOCACHE=yes DOCKERHUB=yes build-awsmgr-image
+    5) $ make NOCACHE=yes DOCKERHUB=yes build-vice-image
 
 Note: Only recompile step 5 unless you need to modify the Python/NodeJS/AWS/Pulumi root alpine Image. Only takes ~1 minute
 
