@@ -2,6 +2,7 @@
 include config.mk
 export
 
+GIT_HASH ?= $(shell git log --format="%h" -n 1)
 BUILDX_NAME ?= mybuilder
 DOCKERHUB_USER ?= hagan
 PYNODE_VERSION ?= alpine3.19v2
@@ -9,21 +10,42 @@ PULUMI_VERSION ?= v0.0.1
 AWSMGR_VERSION ?= v0.0.2
 VICE_VERSION ?= v0.0.1
 PLATFORMS := linux/amd64,linux/arm64
+LOCAL_PLATFORM ?= linux/arm64
 
 PYNODE_DKR_DIR ?= ./src/vice/dockerhub/pynode/latest
 PULUMI_DKR_DIR ?= ./src/vice/dockerhub/pulumi/latest
 AWSMGR_DKR_DIR ?= ./src/vice/dockerhub/awsmgr/latest
 VICE_DKR_DIR ?= ./src/vice/latest
 
-
 APPSTREAM_LAMBDA_API := "$(APPSTREAM_LAMBDA_ROOT_URL)$(APPSTREAM_API)"
 APPSTREAM_LAMBDA_API := $(shell echo $(APPSTREAM_LAMBDA_API) | sed "s/'//g")
 # Define the Dockerfile name
 DOCKERFILE := $(DOCKER_DIR)/Dockerfile
 
+
+ifeq ($(NOCACHE),yes)
+CACHEFLAG := --no-cache
+else
+CACHEFLAG :=
+endif
+
+ifeq ($(DOCKERHUB),yes)
+PUSHFLAG := --push
+else
+PUSHFLAG :=
+endif
+
+ifeq ($(LOCAL), yes)
+LOADFLAG := --load
+PLATFORMS := $(LOCAL_PLATFORM)
+else
+LOADFLAG :=
+endif
+
+
 # No files are created
 .PHONY: all build-pynode-image push-pynode-image shell-pynode-image \
-build-pulumi-image push-pulumi-image shell-pulumi-image \
+build-pulumi-image clean-pulumi-image push-pulumi-image shell-pulumi-image \
 build-awsmgr-image push-awsmgr-image shell-awsmgr-image \
 build-vice-image push-vice-image shell-vice-image \
 compile build start shell clean harbor-pull harbor-start \
@@ -36,10 +58,18 @@ build-pynode-image:
 	cd $(PYNODE_DKR_DIR); \
 	docker buildx use $(BUILDX_NAME); \
 	docker buildx build \
-	  --label pynode \
-	  --platform $(PLATFORMS) \
-	  --tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION) \
-	  --tag $(DOCKERHUB_USER)/pynode:latest .
+		--label pynode \
+		--platform $(PLATFORMS) \
+		--build-arg PYNODE_PARENT_IMAGE=alpine \
+    	--build-arg PYNODE_PARENT_TAG=3.19 \
+		$(CACHEFLAG) $(LOADFLAG) \
+		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION) \
+    	--tag $(DOCKERHUB_USER)/pynode:latest \
+		--push .
+
+tag-latest-pynode-image:
+	@echo "Tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION) as latest"
+	docker tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION) $(DOCKERHUB_USER)/pynode:latest
 
 push-pynode-image:
 	@echo "Pushing pynode $(DOCKERHUB_USER)/pynode:latest to hub.docker.com"
@@ -47,8 +77,9 @@ push-pynode-image:
 	docker push $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION); \
 	docker push $(DOCKERHUB_USER)/pynode:latest
 
+# docker run --rm -it hagan/pynode:$(PYNODE_VERSION) /bin/sh
 shell-pynode-image:
-	@echo "Running pynode $(DOCKERHUB_USER)/pynode:latest"
+	@echo "Running pynode $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION)"
 	cd $(PYNODE_DKR_DIR); \
 	docker run --rm -it hagan/pynode:latest /bin/sh
 
@@ -57,12 +88,24 @@ build-pulumi-image:
 	cd $(PULUMI_DKR_DIR); \
 	docker buildx use $(BUILDX_NAME); \
 	docker buildx build \
-	  --label pulumi \
-	  --platform $(PLATFORMS) \
-	  --build-arg PULUMI_PARENT_IMAGE=hagan/pynode \
-      --build-arg PULUMI_PARENT_TAG=$(PYNODE_VERSION) \
-	  --tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION) \
-	  --tag $(DOCKERHUB_USER)/pulumi:latest .
+		--label pulumi \
+		--platform $(PLATFORMS) \
+		--build-arg PULUMI_PARENT_IMAGE=hagan/pynode \
+		--build-arg PULUMI_PARENT_TAG=$(PYNODE_VERSION) \
+		$(CACHEFLAG) $(LOADFLAG) \
+		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION) \
+		--tag $(DOCKERHUB_USER)/pulumi:latest \
+		$(PUSHFLAG) .
+
+clean-pulumi-image:
+	@echo "Cleaning images out for pulumi"
+	docker rmi $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION)
+	docker rmi $(DOCKERHUB_USER)/pulumi:latest
+	@echo "To complete removal, run: docker images prune -a"
+
+tag-latest-pulumi-image:
+	@echo "Tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION) as latest"
+	docker tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION) $(DOCKERHUB_USER)/pulumi:latest
 
 push-pulumi-image:
 	@echo "Pushing pulumi $(DOCKERHUB_USER)/pulumi:latest to hub.docker.com"
@@ -71,9 +114,9 @@ push-pulumi-image:
 	docker push $(DOCKERHUB_USER)/pulumi:latest
 
 shell-pulumi-image:
-	@echo "Running pulumi $(DOCKERHUB_USER)/pulumi:latest"
+	@echo "Running pulumi $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION)"
 	cd $(PULUMI_DKR_DIR); \
-	docker run --rm -it hagan/pulumi:latest /bin/sh
+	docker run --rm -it hagan/pulumi:$(PULUMI_VERSION) /bin/sh
 
 # --load won't work with multiplatform
 build-awsmgr-image:
@@ -85,8 +128,16 @@ build-awsmgr-image:
 		--platform $(PLATFORMS) \
 		--build-arg AWSMGR_PARENT_IMAGE=hagan/pulumi \
 		--build-arg AWSMGR_PARENT_TAG=$(PULUMI_VERSION) \
+		$(CACHEFLAG) $(LOADFLAG) \
 		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION) \
-		--tag $(DOCKERHUB_USER)/awsmgr:latest .
+		--tag $(DOCKERHUB_USER)/awsmgr:latest \
+		$(PUSHFLAG) .
+
+clean-awsmgr-image:
+	@echo "Cleaning images out for awsmgr"
+	docker rmi $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION)
+	docker rmi $(DOCKERHUB_USER)/awsmgr:latest
+	@echo "To complete removal, run: docker images prune -a"
 
 push-awsmgr-image:
 	@echo "Pushing awsmgr $(DOCKERHUB_USER)/awsmgr:latest to hub.docker.com"
@@ -101,15 +152,25 @@ shell-awsmgr-image:
 
 build-vice-image:
 	@echo "Building viceawsmg $(VICE_VERSION) image"
-	cd $(VICE_DKR_DIR); \
 	docker buildx use $(BUILDX_NAME); \
 	docker buildx build \
-		--label awsmgr \
+		-f $(VICE_DKR_DIR)/Dockerfile \
+		--label viceawsmgr \
 		--platform $(PLATFORMS) \
 		--build-arg VICE_PARENT_IMAGE=hagan/awsmgr \
 		--build-arg VICE_PARENT_TAG=$(AWSMGR_VERSION) \
+		$(CACHEFLAG) $(LOADFLAG) \
 		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) \
-		--tag $(DOCKERHUB_USER)/viceawsmgr:latest .
+		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION)-$(GIT_HASH) \
+		--tag $(DOCKERHUB_USER)/viceawsmgr:latest \
+		$(PUSHFLAG) .
+
+clean-vice-image:
+	@echo "Cleaning images out for vice"
+	docker rmi $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) 2>/dev/null || echo "Image viceawsmgr:$(VICE_VERSION) has already been removed."
+	docker rmi $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION)-$(GIT_HASH) 2>/dev/null || echo "Image viceawsmgr:$(VICE_VERSION)-$(GIT_HASH) has already been removed."
+	docker rmi $(DOCKERHUB_USER)/viceawsmgr:latest 2>/dev/null || echo "Image viceawsmgr:latest has already been removed."
+	@echo "To complete removal, run: docker images prune -a"
 
 push-vice-image:
 	@echo "Pushing viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:latest to hub.docker.com"
@@ -120,7 +181,8 @@ push-vice-image:
 shell-vice-image:
 	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION)"
 	cd $(VICE_DKR_DIR); \
-	docker run --rm -it hagan/viceawsmgr:$(VICE_VERSION) /bin/sh
+	docker ps --filter "name=vice" | grep vice && docker exec -it vice /bin/sh || \
+	docker run --name vice --rm -it hagan/viceawsmgr:latest  /bin/sh
 
 compile:
 	@echo "Building flask wheel... $(NVM_DIR)"

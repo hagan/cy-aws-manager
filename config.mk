@@ -1,3 +1,5 @@
+
+LOCAL_PLATFORM=linux/amd64
 DOCKERHUB_USER=hagan
 COMMENT='fixup'
 ## NOTE: These are also located in the github/actions Repository variables!
