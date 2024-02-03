@@ -13,9 +13,9 @@ AWSMGR_DKR_DIR ?= ./src/vice/dockerhub/awsmgr/latest
 VICE_DKR_DIR ?= ./src/vice/latest
 
 PYNODE_LATEST ?= $(shell readlink $(PYNODE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
-PYNODE_VERSION ?= alpine3.19${PYNODE_LATEST}
+PYNODE_VERSION ?= ${PYNODE_LATEST}
 PULUMI_LATEST ?= $(shell readlink $(PULUMI_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
-PULUMI_VERSION ?= v$(PULUMI_LATEST)
+PULUMI_VERSION ?= $(PULUMI_LATEST)
 AWSMGR_LATEST ?= $(shell readlink $(AWSMGR_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
 AWSMGR_VERSION ?= v$(AWSMGR_LATEST)
 VICE_LATEST ?= $(shell readlink $(VICE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
@@ -41,6 +41,12 @@ ifeq ($(DOCKERHUB),yes)
 PUSHFLAG := --push
 else
 PUSHFLAG :=
+endif
+
+ifeq ($(NOPULL),yes)
+PULLFLAG := --pull=false
+else
+PULLFLAG :=
 endif
 
 ifeq ($(LOCAL),yes)
@@ -80,9 +86,9 @@ build-pynode-image:
 	docker buildx build \
 		--label pynode \
 		--platform $(PLATFORMS) \
-		--build-arg PYNODE_PARENT_IMAGE=alpine \
-    	--build-arg PYNODE_PARENT_TAG=3.19 \
-		$(CACHEFLAG) $(LOADFLAG) \
+		--build-arg PYNODE_PARENT_IMAGE=debian \
+		--build-arg PYNODE_PARENT_TAG=bookworm \
+		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
 		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION)-$(GIT_HASH) \
 		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION) \
     	--tag $(DOCKERHUB_USER)/pynode:latest \
@@ -122,7 +128,7 @@ build-pulumi-image:
 		--platform $(PLATFORMS) \
 		--build-arg PULUMI_PARENT_IMAGE=hagan/pynode \
 		--build-arg PULUMI_PARENT_TAG=$(PYNODE_VERSION) \
-		$(CACHEFLAG) $(LOADFLAG) \
+		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
 		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION)-$(GIT_HASH) \
 		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION) \
 		--tag $(DOCKERHUB_USER)/pulumi:latest \
@@ -162,7 +168,7 @@ build-awsmgr-image:
 		--platform $(PLATFORMS) \
 		--build-arg AWSMGR_PARENT_IMAGE=hagan/pulumi \
 		--build-arg AWSMGR_PARENT_TAG=$(PULUMI_VERSION) \
-		$(CACHEFLAG) $(LOADFLAG) \
+		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
 		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION)-$(GIT_HASH) \
 		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION) \
 		--tag $(DOCKERHUB_USER)/awsmgr:latest \
@@ -201,7 +207,7 @@ build-vice-image:
 		--platform $(PLATFORMS) \
 		--build-arg VICE_PARENT_IMAGE=hagan/awsmgr \
 		--build-arg VICE_PARENT_TAG=$(AWSMGR_VERSION) \
-		$(CACHEFLAG) $(LOADFLAG) \
+		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
 		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) \
 		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION)-$(GIT_HASH) \
 		--tag $(DOCKERHUB_USER)/viceawsmgr:latest \
