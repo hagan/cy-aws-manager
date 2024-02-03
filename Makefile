@@ -12,6 +12,9 @@ AWSMGR_DKR_DIR ?= ./src/vice/dockerhub/awsmgr/latest
 # The Dockerfile for our VICE application
 VICE_DKR_DIR ?= ./src/vice/latest
 
+PYNODE_PARENT_IMAGE := debian
+# PYNODE_PARENT_TAG := bookworm
+PYNODE_PARENT_TAG := 3.11.7-bookworm
 PYNODE_LATEST ?= $(shell readlink $(PYNODE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
 PYNODE_VERSION ?= ${PYNODE_LATEST}
 PULUMI_LATEST ?= $(shell readlink $(PULUMI_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
@@ -86,8 +89,8 @@ build-pynode-image:
 	docker buildx build \
 		--label pynode \
 		--platform $(PLATFORMS) \
-		--build-arg PYNODE_PARENT_IMAGE=debian \
-		--build-arg PYNODE_PARENT_TAG=bookworm \
+		--build-arg PYNODE_PARENT_IMAGE=$(PYNODE_PARENT_IMAGE) \
+		--build-arg PYNODE_PARENT_TAG=$(PYNODE_PARENT_TAG) \
 		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
 		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION)-$(GIT_HASH) \
 		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION) \
