@@ -17,7 +17,7 @@ PYNODE_VERSION ?= ${PYNODE_LATEST}
 PULUMI_LATEST ?= $(shell readlink $(PULUMI_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
 PULUMI_VERSION ?= $(PULUMI_LATEST)
 AWSMGR_LATEST ?= $(shell readlink $(AWSMGR_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
-AWSMGR_VERSION ?= v$(AWSMGR_LATEST)
+AWSMGR_VERSION ?= $(AWSMGR_LATEST)
 VICE_LATEST ?= $(shell readlink $(VICE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
 VICE_VERSION ?= $(VICE_LATEST)
 ## for apple uncomment 
@@ -207,6 +207,7 @@ build-vice-image:
 		--platform $(PLATFORMS) \
 		--build-arg VICE_PARENT_IMAGE=hagan/awsmgr \
 		--build-arg VICE_PARENT_TAG=$(AWSMGR_VERSION) \
+		--build-arg VICE_VERSION=$(VICE_VERSION) \
 		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
 		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) \
 		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION)-$(GIT_HASH) \
@@ -227,10 +228,10 @@ push-vice-image:
 	docker push $(DOCKERHUB_USER)/viceawsmgr:latest
 
 shell-vice-image:
-	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION)"
+	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) -- RUNSHELL=$(RUNSHELL)"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice && docker exec -it vice /bin/sh || \
-	docker run --name vice --rm -it hagan/viceawsmgr:latest  /bin/sh
+	docker run --env "RUNSHELL=$(RUNSHELL)" --name vice --rm -it hagan/viceawsmgr:latest  /bin/sh
 
 compile:
 	@echo "Building flask wheel... $(NVM_DIR)"
