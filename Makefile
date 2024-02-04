@@ -12,8 +12,9 @@ AWSMGR_DKR_DIR ?= ./src/vice/dockerhub/awsmgr/latest
 # The Dockerfile for our VICE application
 VICE_DKR_DIR ?= ./src/vice/latest
 
-PYNODE_PARENT_IMAGE := debian
+# PYNODE_PARENT_IMAGE := debian
 # PYNODE_PARENT_TAG := bookworm
+PYNODE_PARENT_IMAGE := python
 PYNODE_PARENT_TAG := 3.11.7-bookworm
 PYNODE_LATEST ?= $(shell readlink $(PYNODE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
 PYNODE_VERSION ?= ${PYNODE_LATEST}
@@ -33,6 +34,9 @@ APPSTREAM_LAMBDA_API := $(shell echo $(APPSTREAM_LAMBDA_API) | sed "s/'//g")
 # Define the Dockerfile name
 DOCKERFILE := $(DOCKER_DIR)/Dockerfile
 
+
+VICE_WHL_APP = $(shell ls -lhtp ./src/flask/dist/*.whl | head -n1 | awk '{print $$9}')
+NODE_TGZ_APP = $(shell ls -lhtp ./src/ui/dist/*.tgz | head -n1 | awk '{print $$9}')
 
 ifeq ($(NOCACHE),yes)
 CACHEFLAG := --no-cache
@@ -64,8 +68,8 @@ endif
 build-pynode-image clean-pynode-image push-pynode-image shell-pynode-image \
 build-pulumi-image clean-pulumi-image push-pulumi-image shell-pulumi-image \
 build-awsmgr-image push-awsmgr-image shell-awsmgr-image \
-build-vice-image push-vice-image shell-vice-image \
-compile build start shell clean harbor-pull harbor-start \
+build-vice-image push-vice-image shell-vice-image shell-gunicorn-vice-image \
+build-flask-app compile build start shell clean harbor-pull harbor-start \
 harbor-shell harbor-shell-ni harbor-login
 
 all: build
@@ -234,7 +238,57 @@ shell-vice-image:
 	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) -- RUNSHELL=$(RUNSHELL)"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice && docker exec -it vice /bin/sh || \
-	docker run --env "RUNSHELL=$(RUNSHELL)" --name vice --rm -it hagan/viceawsmgr:latest  /bin/sh
+	docker run \
+	  --env "RUNSHELL=$(RUNSHELL)" \
+	  --name vice \
+	  -p 80:80 \
+	  -p 8080:8080 \
+	  -p 2022:22 \
+	  --rm -it hagan/viceawsmgr:latest  /bin/sh
+
+shell-gunicorn-vice-image:
+	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) as gunicorn user"
+	cd $(VICE_DKR_DIR); \
+	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
+	  && docker exec -it vice /bin/sh -c \
+	    'su - gunicorn -c ". /home/gunicorn/envs/flask-env/bin/activate && export FLASK_APP='awsmgr.app' && exec /usr/bin/bash"' \
+	  || echo "vice image not running!"
+
+build-flask-app:
+	@echo "Compile/build package for flask..."
+	cd $(FLASK_DIR) && \
+	./build.sh
+
+## helper shells into our (running vice) and inserts a new version of the awsmgr!
+reload-vice-flask-app: build-flask-app
+	@echo "Inserting $(VICE_WHL_APP)"
+	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
+	&& docker cp $(VICE_WHL_APP) vice:/tmp/wheels \
+	&& docker exec -it vice /bin/sh -c 'su - gunicorn -c /home/gunicorn/bin/update-wheel.sh' \
+	&& docker exec -it vice /bin/sh -c 'supervisorctl restart gunicorn' \
+	|| echo "ERROR: vice is not running, try 'make shell-vice-image'"
+
+
+shell-node-vice-image:
+	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) as node user"
+	cd $(VICE_DKR_DIR); \
+	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
+	  && docker exec -it vice /bin/sh -c \
+	    'su - node -c "exec /usr/bin/bash"' \
+	  || echo "vice image not running!"
+
+build-node-app:
+	@echo "Compile/build package for Express/NextJS"
+	cd $(NODE_DIR) && \
+	./build.sh
+
+reload-vice-node-app: build-node-app
+	@echo "Inserting $(NODE_TGZ_APP)"
+	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
+	&& docker cp $(NODE_TGZ_APP) vice:/tmp/npms \
+	&& docker exec -it vice /bin/sh -c 'su - node -c /home/node/bin/update-npm.sh' \
+	&& docker exec -it vice /bin/sh -c 'supervisorctl restart express' \
+	|| echo "ERROR: vice is not running, try 'make shell-vice-image'"
 
 compile:
 	@echo "Building flask wheel... $(NVM_DIR)"
