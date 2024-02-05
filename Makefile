@@ -220,7 +220,7 @@ build-vice-image:
 		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION)-$(GIT_HASH) \
 		--tag $(DOCKERHUB_USER)/viceawsmgr:latest \
 		$(PUSHFLAG) .
-
+# vice - clean image
 clean-vice-image:
 	@echo "Cleaning images out for vice"
 	docker rmi $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) 2>/dev/null || echo "Image viceawsmgr:$(VICE_VERSION) has already been removed."
@@ -237,14 +237,17 @@ push-vice-image:
 shell-vice-image:
 	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) -- RUNSHELL=$(RUNSHELL)"
 	cd $(VICE_DKR_DIR); \
-	docker ps --filter "name=vice" | grep vice && docker exec -it vice /bin/sh || \
-	docker run \
-	  --env "RUNSHELL=$(RUNSHELL)" \
-	  --name vice \
-	  -p 80:80 \
-	  -p 8080:8080 \
-	  -p 2022:22 \
-	  --rm -it hagan/viceawsmgr:latest  /bin/sh
+	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
+		&& docker exec -it vice /usr/bin/bash \
+		|| docker run \
+			--env "RUNSHELL=$(RUNSHELL)" \
+			--name vice \
+			-p 80:80 \
+			-p 8080:8080 \
+			-p 2022:22 \
+			--volume ./src/ui/dist:/tmp/npms \
+			--volume ./src/flask/dist:/tmp/wheels \
+			--rm -it hagan/viceawsmgr:latest  /bin/sh
 
 shell-gunicorn-vice-image:
 	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) as gunicorn user"
@@ -273,8 +276,7 @@ shell-node-vice-image:
 	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) as node user"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
-	  && docker exec -it vice /bin/sh -c \
-	    'su - node -c "exec /usr/bin/bash"' \
+	  && docker exec -it --user node vice /usr/bin/bash \
 	  || echo "vice image not running!"
 
 build-node-app:
