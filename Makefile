@@ -65,6 +65,7 @@ endif
 
 # No files are created
 .PHONY: all show-vars \
+setup-yarn-cache-volume \
 build-pynode-image clean-pynode-image push-pynode-image shell-pynode-image \
 build-pulumi-image clean-pulumi-image push-pulumi-image shell-pulumi-image \
 build-awsmgr-image push-awsmgr-image shell-awsmgr-image \
@@ -170,7 +171,8 @@ build-awsmgr-image:
 	@echo "Building awsmgr $(AWSMGR_VERSION) image"
 	cd $(AWSMGR_DKR_DIR); \
 	docker buildx use $(BUILDX_NAME); \
-	docker buildx build \
+	DOCKER_BUILDKIT=1 docker buildx build \
+		--progress=plain \
 		--label awsmgr \
 		--platform $(PLATFORMS) \
 		--build-arg AWSMGR_PARENT_IMAGE=hagan/pulumi \
@@ -205,10 +207,11 @@ shell-awsmgr-image:
 	docker run --rm -it hagan/awsmgr:latest /bin/sh
 ## vice
 # build vice
-build-vice-image:
+build-vice-image: build-flask-app build-node-app
 	@echo "Building viceawsmg $(VICE_VERSION) image"
 	docker buildx use $(BUILDX_NAME); \
-	docker buildx build \
+	DOCKER_BUILDKIT=1 docker buildx build \
+		--progress=plain \
 		-f $(VICE_DKR_DIR)/Dockerfile \
 		--label viceawsmgr \
 		--platform $(PLATFORMS) \
@@ -281,8 +284,7 @@ shell-node-vice-image:
 
 build-node-app:
 	@echo "Compile/build package for Express/NextJS"
-	cd $(NODE_DIR) && \
-	./build.sh
+	$(NODE_DIR)/build.sh
 
 reload-vice-node-app: build-node-app
 	@echo "Inserting $(NODE_TGZ_APP)"
