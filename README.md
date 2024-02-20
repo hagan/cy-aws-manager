@@ -2,11 +2,26 @@
 
 version: 0.0.1
 
+#### Prereqs
+
+  * Setup direnv in your bash/zsh environment: https://direnv.net/
+  * Setup pyenv or similar to setup poetry for flask -> <project>/src/flask/README.md for more info
+
+
 #### Git submodules/HOWTO
 
 To clone repo:
 ```
   git clone --recurse-submodules <repo url>
+```
+
+Updating project &/or submodules...
+Note: repo submodules start off detached if you checkout the root project space. To make changes:
+```
+  cd <project>/src/ui; git checkout main; .. work ..; git commit -am "update react thing"; git push
+  cd <project>/src/flask; git checkout main; .. work ..; git commit -am "updated flask thing"; git push
+  cd <project>/src/vice; git checkout main; .. work ..; git commit -am "updated docker vice stuff"; git push
+  cd <project>; git commit -am "updated all the things"; git push
 ```
 
 #### Git LFS
@@ -47,5 +62,3 @@ Note: Only recompile step 5 unless you need to modify the Python/NodeJS/AWS/Pulu
   1) VICE applicaiton for Cyverse infrasturcture (cy-aws-vice)
   2) Lambda functions for AWS C&C
   3) Flask UX application for vice app
-
-

@@ -35,8 +35,14 @@ APPSTREAM_LAMBDA_API := $(shell echo $(APPSTREAM_LAMBDA_API) | sed "s/'//g")
 DOCKERFILE := $(DOCKER_DIR)/Dockerfile
 
 
-VICE_WHL_APP = $(shell ls -lhtp ./src/flask/dist/*.whl | head -n1 | awk '{print $$9}')
-NODE_TGZ_APP = $(shell ls -lhtp ./src/ui/dist/*.tgz | head -n1 | awk '{print $$9}')
+VICE_WHL_APP := $(shell ls -lhtp $(CURDIR)/src/flask/dist/*.whl | head -n1 | awk '{print $$9}')
+NODE_TGZ_APP := $(shell ls -lhtp $(CURDIR)/src/ui/dist/*.tgz | head -n1 | awk '{print $$9}')
+
+ifeq ($(strip $(NODE_TGZ_APP)),)
+$(error NODE_TGZ_APP is unset or empty)
+else
+$(info $$NODE_TGZ_APP is [${NODE_TGZ_APP}])
+endif
 
 ifeq ($(NOCACHE),yes)
 CACHEFLAG := --no-cache
@@ -72,8 +78,10 @@ build-awsmgr-image push-awsmgr-image shell-awsmgr-image \
 build-vice-image push-vice-image shell-vice-image shell-gunicorn-vice-image \
 build-flask-app compile build start shell clean harbor-pull harbor-start \
 harbor-shell harbor-shell-ni harbor-login
-
-all: build
+# $(error NODE_TGZ_APP is unset or empty!)
+all:
+	$(NOECHO) $(NOOP)
+	
 
 show-vars:
 	@echo "DOCKERHUB_USER: $(DOCKERHUB_USER)"
@@ -207,8 +215,9 @@ shell-awsmgr-image:
 	docker run --rm -it hagan/awsmgr:latest /bin/sh
 ## vice
 # build vice
-build-vice-image: build-flask-app build-node-app
+build-vice-image: all build-flask-app build-node-app
 	@echo "Building viceawsmg $(VICE_VERSION) image"
+	@test -f $(NODE_TGZ_APP) || (echo "ERROR: $(NODE_TGZ_APP) not found!" && false)
 	docker buildx use $(BUILDX_NAME); \
 	DOCKER_BUILDKIT=1 docker buildx build \
 		--progress=plain \
@@ -248,8 +257,8 @@ shell-vice-image:
 			-p 80:80 \
 			-p 8080:8080 \
 			-p 2022:22 \
-			--volume ./src/ui/dist:/tmp/npms \
-			--volume ./src/flask/dist:/tmp/wheels \
+			--volume $(CURDIR)/src/ui/dist:/mnt/dist/npms \
+			--volume $(CURDIR)/src/flask/dist:/mnt/dist/wheels \
 			--rm -it hagan/viceawsmgr:latest  /bin/sh
 
 shell-gunicorn-vice-image:
@@ -269,7 +278,7 @@ build-flask-app:
 reload-vice-flask-app: build-flask-app
 	@echo "Inserting $(VICE_WHL_APP)"
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
-	&& docker cp $(VICE_WHL_APP) vice:/tmp/wheels \
+	&& docker cp $(VICE_WHL_APP) vice:/mnt/dist/wheels \
 	&& docker exec -it vice /bin/sh -c 'su - gunicorn -c /home/gunicorn/bin/update-wheel.sh' \
 	&& docker exec -it vice /bin/sh -c 'supervisorctl restart gunicorn' \
 	|| echo "ERROR: vice is not running, try 'make shell-vice-image'"
@@ -289,7 +298,7 @@ build-node-app:
 reload-vice-node-app: build-node-app
 	@echo "Inserting $(NODE_TGZ_APP)"
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
-	&& docker cp $(NODE_TGZ_APP) vice:/tmp/npms \
+	&& docker cp $(NODE_TGZ_APP) vice:/mnt/dist/npms \
 	&& docker exec -it vice /bin/sh -c 'su - node -c /home/node/bin/update-npm.sh' \
 	&& docker exec -it vice /bin/sh -c 'supervisorctl restart express' \
 	|| echo "ERROR: vice is not running, try 'make shell-vice-image'"
@@ -345,7 +354,7 @@ shell:
 clean:
 	@echo "Cleaning up..."
 	docker rmi $$(docker images -f "dangling=true" -q) 2> /dev/null || true
-	docker rm -f $(DOCKER_IMAGE)
+# docker rm -f $(DOCKER_IMAGE)
 	@echo "Clean up complete!"
 
 ## issue -> docker pull harbor.cyverse.org/vice/$(DOCKER_IMAGE):$(DOCKER_TAG)
