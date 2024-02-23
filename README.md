@@ -13,10 +13,24 @@ version: 0.0.1
 To clone repo:
 ```
   git clone --recurse-submodules <repo url>
+
+  # OR
+  git clone <repo url> <project dir name>
+  cd <project dir name>
+  ## For the very first time you clone a project:
+  git submodule update --init --recursive
+```
+
+To update project
+
+```
+  cd <project dir name>
+  git pull
+  git submodule update --recursive --remote
 ```
 
 Updating project &/or submodules...
-Note: repo submodules start off detached if you checkout the root project space. To make changes:
+Note: Sometimes a repo submodule will become detached if you checkout the root project space (by design). To make a change and/or commit:
 ```
   cd <project>/src/ui; git checkout main; .. work ..; git commit -am "update react thing"; git push
   cd <project>/src/flask; git checkout main; .. work ..; git commit -am "updated flask thing"; git push

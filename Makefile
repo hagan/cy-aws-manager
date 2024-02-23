@@ -35,14 +35,8 @@ APPSTREAM_LAMBDA_API := $(shell echo $(APPSTREAM_LAMBDA_API) | sed "s/'//g")
 DOCKERFILE := $(DOCKER_DIR)/Dockerfile
 
 
-VICE_WHL_APP := $(shell ls -lhtp $(CURDIR)/src/flask/dist/*.whl | head -n1 | awk '{print $$9}')
-NODE_TGZ_APP := $(shell ls -lhtp $(CURDIR)/src/ui/dist/*.tgz | head -n1 | awk '{print $$9}')
-
-ifeq ($(strip $(NODE_TGZ_APP)),)
-$(error NODE_TGZ_APP is unset or empty)
-else
-$(info $$NODE_TGZ_APP is [${NODE_TGZ_APP}])
-endif
+VICE_WHL_APP := $(shell ls -lhtp $(CURDIR)/src/flask/dist/*.whl 2>/dev/null | head -n1 | awk '{print $$9}' || true)
+NODE_TGZ_APP := $(shell ls -lhtp $(CURDIR)/src/ui/dist/*.tgz 2>/dev/null | head -n1 | awk '{print $$9}' || true)
 
 ifeq ($(NOCACHE),yes)
 CACHEFLAG := --no-cache
@@ -216,8 +210,9 @@ shell-awsmgr-image:
 ## vice
 # build vice
 build-vice-image: all build-flask-app build-node-app
+	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
 	@echo "Building viceawsmg $(VICE_VERSION) image"
-	@test -f $(NODE_TGZ_APP) || (echo "ERROR: $(NODE_TGZ_APP) not found!" && false)
+	@if [ ! -f "$(NODE_TGZ_APP)" ]; then (echo "ERROR: $(NODE_TGZ_APP) not found!" && exit 1); fi
 	docker buildx use $(BUILDX_NAME); \
 	DOCKER_BUILDKIT=1 docker buildx build \
 		--progress=plain \
@@ -279,7 +274,7 @@ reload-vice-flask-app: build-flask-app
 	@echo "Inserting $(VICE_WHL_APP)"
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	&& docker cp $(VICE_WHL_APP) vice:/mnt/dist/wheels \
-	&& docker exec -it vice /bin/sh -c 'su - gunicorn -c /home/gunicorn/bin/update-wheel.sh' \
+	&& docker exec -it vice /bin/sh -c 'su - gunicorn -c /usr/local/bin/update-wheel.sh' \
 	&& docker exec -it vice /bin/sh -c 'supervisorctl restart gunicorn' \
 	|| echo "ERROR: vice is not running, try 'make shell-vice-image'"
 
@@ -296,12 +291,16 @@ build-node-app:
 	$(NODE_DIR)/build.sh
 
 reload-vice-node-app: build-node-app
+	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
+	@echo "Building viceawsmg $(VICE_VERSION) image"
+	@if [ ! -f "$(NODE_TGZ_APP)" ]; then (echo "ERROR: $(NODE_TGZ_APP) not found!" && exit 1); fi
 	@echo "Inserting $(NODE_TGZ_APP)"
-	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
+	@docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	&& docker cp $(NODE_TGZ_APP) vice:/mnt/dist/npms \
-	&& docker exec -it vice /bin/sh -c 'su - node -c /home/node/bin/update-npm.sh' \
+	&& docker exec -it vice /bin/sh -c 'su - node -c /usr/local/bin/update-npm.sh' \
+	|| { echo "Error while updating package!"; exit 1; } \
 	&& docker exec -it vice /bin/sh -c 'supervisorctl restart express' \
-	|| echo "ERROR: vice is not running, try 'make shell-vice-image'"
+	|| { echo "ERROR: trying to restart express"; exit 1; }
 
 compile:
 	@echo "Building flask wheel... $(NVM_DIR)"
@@ -331,7 +330,7 @@ build:
 		--build-arg DOCKER_DIR=$(DOCKER_DIR) \
 		$(CONTEXT)
 
-#  		--env "NODE_SOCK=/tmp/node-nextjs.socket"
+#  		--env "SOCKET_FILE=/tmp/node-nextjs.socket"
 
 start:
 	@echo "Starting Docker container..."
@@ -354,6 +353,7 @@ shell:
 clean:
 	@echo "Cleaning up..."
 	docker rmi $$(docker images -f "dangling=true" -q) 2> /dev/null || true
+	docker buildx prune
 # docker rm -f $(DOCKER_IMAGE)
 	@echo "Clean up complete!"
 
