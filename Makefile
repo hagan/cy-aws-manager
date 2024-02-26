@@ -2,29 +2,35 @@
 include config.mk
 export
 
+PULUMI_VERSION ?= 3.106.0
 GIT_HASH ?= $(shell git log --format="%h" -n 1)
 BUILDX_NAME ?= default
 DOCKERHUB_USER ?= $(whoami)
 # Supporing/source Dockerfile images
-PYNODE_DKR_DIR ?= ./src/vice/dockerhub/pynode/latest
-PULUMI_DKR_DIR ?= ./src/vice/dockerhub/pulumi/latest
-AWSMGR_DKR_DIR ?= ./src/vice/dockerhub/awsmgr/latest
+LATEST_PYNODE_DKR_DIR ?= ./src/vice/dockerhub/pynode/latest
+LATEST_PULUMI_DKR_DIR ?= ./src/vice/dockerhub/pulumi/latest
+LATEST_AWSMGR_DKR_DIR ?= ./src/vice/dockerhub/awsmgr/latest
 # The Dockerfile for our VICE application
-VICE_DKR_DIR ?= ./src/vice/latest
+LATEST_VICE_DKR_DIR ?= ./src/vice/latest
 
 
 # PYNODE_PARENT_IMAGE := debian
 # PYNODE_PARENT_TAG := bookworm
 PYNODE_PARENT_IMAGE := python
 PYNODE_PARENT_TAG := 3.11.7-bookworm
-PYNODE_LATEST ?= $(shell readlink $(PYNODE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
-PYNODE_VERSION ?= ${PYNODE_LATEST}
-PULUMI_LATEST ?= $(shell readlink $(PULUMI_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
-PULUMI_VERSION ?= $(PULUMI_LATEST)
-AWSMGR_LATEST ?= $(shell readlink $(AWSMGR_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
-AWSMGR_VERSION ?= $(AWSMGR_LATEST)
-VICE_LATEST ?= $(shell readlink $(VICE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
-VICE_VERSION ?= $(VICE_LATEST)
+
+PYNODE_DKR_VERSION ?= $(shell readlink $(LATEST_PYNODE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
+PYNODE_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_PYNODE_DKR_DIR))"
+
+PULUMI_DKR_VERSION ?= $(shell readlink $(LATEST_PULUMI_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
+PULUMI_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_PULUMI_DKR_DIR))"
+
+AWSMGR_DKR_VERSION ?= $(shell readlink $(LATEST_AWSMGR_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
+AWSMGR_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_AWSMGR_DKR_DIR))"
+
+VICE_DKR_VERSION ?= $(shell readlink $(LATEST_VICE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
+VICE_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_VICE_DKR_DIR))"
+
 ## for apple uncomment 
 # PLATFORMS := linux/amd64,linux/arm64
 PLATFORMS := linux/amd64
@@ -33,7 +39,7 @@ LOCAL_PLATFORM ?= linux/arm64
 APPSTREAM_LAMBDA_API := "$(APPSTREAM_LAMBDA_ROOT_URL)$(APPSTREAM_API)"
 APPSTREAM_LAMBDA_API := $(shell echo $(APPSTREAM_LAMBDA_API) | sed "s/'//g")
 # Define the Dockerfile name
-DOCKERFILE := $(DOCKER_DIR)/Dockerfile
+# DOCKERFILE := $(DOCKER_DIR)/Dockerfile
 
 
 VICE_WHL_APP := $(shell ls -lhtp $(CURDIR)/src/flask/dist/*.whl 2>/dev/null | head -n1 | awk '{print $$9}' || true)
@@ -77,15 +83,33 @@ harbor-shell harbor-shell-ni harbor-login
 all:
 	$(NOECHO) $(NOOP)
 
-show-vars:
-	@echo "DOCKERHUB_USER: $(DOCKERHUB_USER)"
-	@echo "PYNODE_LATEST: $(PYNODE_LATEST)"
-	@echo "PYNODE_VERSION: $(PYNODE_VERSION)"
-	@echo "PULUMI_LATEST: $(PULUMI_LATEST)"
-	@echo "AWSMGR_LATEST: $(AWSMGR_LATEST)"
-	@echo "AWSMGR_VERSION: $(AWSMGR_VERSION)"
-	@echo "VICE_LATEST: $(VICE_LATEST)"
-	@echo "VICE_VERSION: $(VICE_VERSION)"
+show-pynode-vars:
+	@echo "LATEST_PYNODE_DKR_DIR: $(LATEST_PYNODE_DKR_DIR)"
+	@echo "   PYNODE_DKR_VERSION: $(PYNODE_DKR_VERSION)"
+	@echo "       PYNODE_DKR_DIR: $(PYNODE_DKR_DIR)"
+	@echo ""
+
+show-pulumi-vars:
+	@echo "LATEST_PULUMI_DKR_DIR: $(LATEST_PULUMI_DKR_DIR)"
+	@echo "   PULUMI_DKR_VERSION: $(PULUMI_DKR_VERSION)"
+	@echo "       PULUMI_DKR_DIR: $(PULUMI_DKR_DIR)"
+	@echo ""
+
+show-awsmgr-vars:
+	@echo "LATEST_AWSMGR_DKR_DIR: $(LATEST_AWSMGR_DKR_DIR)"
+	@echo "   AWSMGR_DKR_VERSION: $(AWSMGR_DKR_VERSION)"
+	@echo "       AWSMGR_DKR_DIR: $(AWSMGR_DKR_DIR)"
+	@echo ""
+
+show-vice-vars:
+	@echo "LASTEST_VICE_DKR_DIR: $(LATEST_VICE_DKR_DIR)"
+	@echo "    VICE_DKR_VERSION: $(VICE_DKR_VERSION)"
+	@echo "        VICE_DKR_DIR: $(VICE_DKR_DIR)"
+	@echo ""
+
+show-vars: show-pynode-vars show-pulumi-vars show-awsmgr-vars show-vice-vars
+# @echo "DOCKERHUB_USER: $(DOCKERHUB_USER)"
+
 ### DEBUGGING ISSUES
 reset-docker-mybuilder:
 	@docker buildx rm $(BUILDX_NAME)
@@ -93,7 +117,7 @@ reset-docker-mybuilder:
 ## PYNODE
 # Build pynode (Python/Node & Golang)
 build-pynode-image:
-	@echo "Building pynode $(PYNODE_VERSION) image"
+	@echo "Building pynode $(PYNODE_DKR_VERSION) image"
 	cd $(PYNODE_DKR_DIR); \
 	docker buildx use $(BUILDX_NAME); \
 	docker buildx build \
@@ -102,79 +126,80 @@ build-pynode-image:
 		--build-arg PYNODE_PARENT_IMAGE=$(PYNODE_PARENT_IMAGE) \
 		--build-arg PYNODE_PARENT_TAG=$(PYNODE_PARENT_TAG) \
 		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
-		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION)-$(GIT_HASH) \
-		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION) \
+		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)-$(GIT_HASH) \
+		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION) \
     	--tag $(DOCKERHUB_USER)/pynode:latest \
 		$(PUSHFLAG) .
 # Tag pynode
 tag-pynode-image:
-	@echo "Tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION) as latest"
-	docker tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION)
-	docker tag $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/pynode:latest
+	@echo "Tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION) as latest"
+	docker tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)
+	docker tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/pynode:latest
 # Clean pynode
 clean-pynode-image:
 	@echo "Cleaning images out for pynode"
-	docker rmi $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION) 2>/dev/null || echo "Image pynode:$(PYNODE_VERSION) has already been removed."
-	docker rmi $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION)-* 2>/dev/null || echo "Image pynode:$(PYNODE_VERSION)-* has already been removed."
+	docker rmi $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION) 2>/dev/null || echo "Image pynode:$(PYNODE_DKR_VERSION) has already been removed."
+	docker rmi $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)-* 2>/dev/null || echo "Image pynode:$(PYNODE_DKR_VERSION)-* has already been removed."
 	docker rmi $(DOCKERHUB_USER)/pynode:latest 2>/dev/null || echo "Image pynode:latest has already been removed."
 	@echo "To complete removal, run: docker images prune -a"
 # Push pynode
 push-pynode-image:
 	@echo "Pushing pynode $(DOCKERHUB_USER)/pynode:latest to hub.docker.com"
 	cd $(PYNODE_DKR_DIR); \
-	docker push $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION)-$(GIT_HASH); \
-	docker push $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION); \
+	docker push $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)-$(GIT_HASH); \
+	docker push $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION); \
 	docker push $(DOCKERHUB_USER)/pynode:latest
 # Shell pynode
 shell-pynode-image:
-	@echo "Running pynode $(DOCKERHUB_USER)/pynode:$(PYNODE_VERSION)"
+	@echo "Running pynode $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)"
 	cd $(PYNODE_DKR_DIR); \
 	docker run --rm -it hagan/pynode:latest /bin/sh
 ## PULUMI
 # Build pulumi
 build-pulumi-image:
-	@echo "Building pulumi $(PULUMI_VERSION) image"
+	@echo "Building pulumi $(PULUMI_DKR_VERSION) image"
 	cd $(PULUMI_DKR_DIR); \
 	docker buildx use $(BUILDX_NAME); \
 	docker buildx build \
 		--label pulumi \
 		--platform $(PLATFORMS) \
+		--build-arg PULUMI_VERSION=$(PULUMI_VERSION) \
 		--build-arg PULUMI_PARENT_IMAGE=hagan/pynode \
-		--build-arg PULUMI_PARENT_TAG=$(PYNODE_VERSION) \
+		--build-arg PULUMI_PARENT_TAG=$(PYNODE_DKR_VERSION) \
 		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
-		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION)-$(GIT_HASH) \
-		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION) \
+		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)-$(GIT_HASH) \
+		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION) \
 		--tag $(DOCKERHUB_USER)/pulumi:latest \
 		$(PUSHFLAG) .
 # Tag pulumi
 tag-pulumi-image:
-	@echo "Tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION) as latest"
-	docker tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/pulumi:latest
-	docker tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION)
+	@echo "Tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION) as latest"
+	docker tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/pulumi:latest
+	docker tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)
 # Clean pulumi
 clean-pulumi-image:
 	@echo "Cleaning images out for pulumi"
-	docker rmi $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION) 2>/dev/null || echo "Image pulumi:$(PULUMI_VERSION) has already been removed."
-	docker rmi $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION)-* 2>/dev/null || echo "Image pulumi:$(PULUMI_VERSION)-* has already been removed."
+	docker rmi $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION) 2>/dev/null || echo "Image pulumi:$(PULUMI_DKR_VERSION) has already been removed."
+	docker rmi $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)-* 2>/dev/null || echo "Image pulumi:$(PULUMI_DKR_VERSION)-* has already been removed."
 	docker rmi $(DOCKERHUB_USER)/pulumi:latest 2>/dev/null || echo "Image pulumi:latest has already been removed."
 	@echo "To complete removal, run: docker images prune -a"
 # Push pulumi
 push-pulumi-image:
 	@echo "Pushing pulumi $(DOCKERHUB_USER)/pulumi:latest to hub.docker.com"
 	cd $(PULUMI_DKR_DIR); \
-	docker push $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION)-$(GIT_HASH); \
-	docker push $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION); \
+	docker push $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)-$(GIT_HASH); \
+	docker push $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION); \
 	docker push $(DOCKERHUB_USER)/pulumi:latest
 # shell pulumi
 shell-pulumi-image:
-	@echo "Running pulumi $(DOCKERHUB_USER)/pulumi:$(PULUMI_VERSION)"
+	@echo "Running pulumi $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)"
 	cd $(PULUMI_DKR_DIR); \
 	docker run --rm -it hagan/pulumi:latest /bin/sh
 ## AWSMGR
 # build awsmgr
 build-awsmgr-image: all
 	@( cd $(CURDIR)/src/flask; poetry export -f requirements.txt --output requirements.txt )
-	@echo "Building awsmgr $(AWSMGR_VERSION) image"
+	@echo "Building awsmgr $(AWSMGR_DKR_VERSION) image"
 	@( cd $(AWSMGR_DKR_DIR); cp $(CURDIR)/src/ui/yarn.lock .; cp $(CURDIR)/src/ui/package.json . )
 	@mv $(CURDIR)/src/flask/requirements.txt .
 
@@ -185,29 +210,29 @@ build-awsmgr-image: all
 		--label awsmgr \
 		--platform $(PLATFORMS) \
 		--build-arg AWSMGR_PARENT_IMAGE=hagan/pulumi \
-		--build-arg AWSMGR_PARENT_TAG=$(PULUMI_VERSION) \
+		--build-arg AWSMGR_PARENT_TAG=$(PULUMI_DKR_VERSION) \
 		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
-		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION)-$(GIT_HASH) \
-		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION) \
+		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-$(GIT_HASH) \
+		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) \
 		--tag $(DOCKERHUB_USER)/awsmgr:latest \
 		$(PUSHFLAG) .
 # Tag awsmgr
 tag-awsmgr-image:
-	@echo "Tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION) as latest"
-	docker tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/awsmgr:latest
-	docker tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION)
+	@echo "Tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) as latest"
+	docker tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/awsmgr:latest
+	docker tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)
 # clean awsmgr
 clean-awsmgr-image:
 	@echo "Cleaning images out for awsmgr"
-	docker rmi $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION) 2>/dev/null || echo "Image awsmgr:$(AWSMGR_VERSION) has already been removed."
-	docker rmi $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION)-* 2>/dev/null || echo "Image awsmgr:$(AWSMGR_VERSION)-* has already been removed."
+	docker rmi $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) 2>/dev/null || echo "Image awsmgr:$(AWSMGR_DKR_VERSION) has already been removed."
+	docker rmi $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-* 2>/dev/null || echo "Image awsmgr:$(AWSMGR_DKR_VERSION)-* has already been removed."
 	docker rmi $(DOCKERHUB_USER)/awsmgr:latest 2>/dev/null || echo "Image awsmgr:latest has already been removed."
 	@echo "To complete removal, run: docker images prune -a"
 # push awsmgr
 push-awsmgr-image:
 	@echo "Pushing awsmgr $(DOCKERHUB_USER)/awsmgr:latest to hub.docker.com"
 	cd $(AWSMGR_DKR_DIR); \
-	docker push $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_VERSION); \
+	docker push $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION); \
 	docker push $(DOCKERHUB_USER)/awsmgr:latest
 # shell awsmgr
 shell-awsmgr-image:
@@ -218,7 +243,7 @@ shell-awsmgr-image:
 # build vice
 build-vice-image: all build-flask-app build-node-app
 	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
-	@echo "$(date +%T) - Building viceawsmg $(VICE_VERSION) image from $(VICE_DKR_DIR)/Dockerfile!"
+	@echo "$(date +%T) - Building viceawsmg $(VICE_DKR_VERSION) image from $(VICE_DKR_DIR)/Dockerfile!"
 	@echo "FLAGS: $(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) $(PUSHFLAG)"
 	@if [ ! -f "$(NODE_TGZ_APP)" ]; then (echo "ERROR: $(NODE_TGZ_APP) not found!" && exit 1); fi
 	@docker buildx use $(BUILDX_NAME); \
@@ -228,32 +253,35 @@ build-vice-image: all build-flask-app build-node-app
 		--label viceawsmgr \
 		--platform $(PLATFORMS) \
 		--build-arg VICE_PARENT_IMAGE=hagan/awsmgr \
-		--build-arg VICE_PARENT_TAG=$(AWSMGR_VERSION) \
-		--build-arg VICE_VERSION=$(VICE_VERSION) \
+		--build-arg VICE_PARENT_TAG=$(AWSMGR_DKR_VERSION) \
+		--build-arg VICE_DKR_VERSION=$(VICE_DKR_VERSION) \
+		--build-arg VICE_DKR_DIR=$(VICE_DKR_DIR) \
 		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
-		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) \
-		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION)-$(GIT_HASH) \
+		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) \
+		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION)-$(GIT_HASH) \
 		--tag $(DOCKERHUB_USER)/viceawsmgr:latest \
 		$(PUSHFLAG) .
 # vice - clean image
 clean-vice-image:
 	@echo "Cleaning images out for vice"
-	docker rmi $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) 2>/dev/null || echo "Image viceawsmgr:$(VICE_VERSION) has already been removed."
-	docker rmi $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION)-$(GIT_HASH) 2>/dev/null || echo "Image viceawsmgr:$(VICE_VERSION)-$(GIT_HASH) has already been removed."
+	docker rmi $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) 2>/dev/null || echo "Image viceawsmgr:$(VICE_DKR_VERSION) has already been removed."
+	docker rmi $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION)-$(GIT_HASH) 2>/dev/null || echo "Image viceawsmgr:$(VICE_DKR_VERSION)-$(GIT_HASH) has already been removed."
 	docker rmi $(DOCKERHUB_USER)/viceawsmgr:latest 2>/dev/null || echo "Image viceawsmgr:latest has already been removed."
 	@echo "To complete removal, run: docker images prune -a"
 
 push-vice-image:
 	@echo "Pushing viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:latest to hub.docker.com"
 	cd $(VICE_DKR_DIR); \
-	docker push $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION); \
+	docker push $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION); \
 	docker push $(DOCKERHUB_USER)/viceawsmgr:latest
 
 shell-vice-image:
-	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) -- RUNSHELL=$(RUNSHELL)"
+	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) -- RUNSHELL=$(RUNSHELL)"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
-		&& docker exec -it vice /usr/bin/bash \
+		&& docker exec \
+		  --env "AWS_KMS_KEY=$(AWS_KMS_KEY)" \
+		  -it vice /usr/bin/bash \
 		|| docker run \
 			--env "RUNSHELL=$(RUNSHELL)" \
 			--env "AWS_KMS_KEY=$(AWS_KMS_KEY)" \
@@ -270,7 +298,7 @@ history-vice-image:
 	@docker history $(DOCKERHUB_USER)/viceawsmgr:latest
 
 shell-gunicorn-vice-image:
-	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) as gunicorn user"
+	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) as gunicorn user"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	  && docker exec -it vice /bin/sh -c \
@@ -294,7 +322,7 @@ reload-vice-flask-app: build-flask-app
 
 
 shell-node-vice-image:
-	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) as node user"
+	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) as node user"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	  && docker exec -it --user node vice /usr/bin/bash \
@@ -306,7 +334,7 @@ build-node-app:
 
 reload-vice-node-app: build-node-app
 	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
-	@echo "Building viceawsmg $(VICE_VERSION) image"
+	@echo "Building viceawsmg $(VICE_DKR_VERSION) image"
 	@if [ ! -f "$(NODE_TGZ_APP)" ]; then (echo "ERROR: $(NODE_TGZ_APP) not found!" && exit 1); fi
 	@echo "Inserting $(NODE_TGZ_APP)"
 	@docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \

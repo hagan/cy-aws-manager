@@ -6,14 +6,16 @@ COMMENT='fixup'
 SRC_DOCKER_IMAGE='hagan/awsmgr'
 SRC_DOCKER_VER='v0.0.3'
 
+PULUMI_VERSION=3.107.0
+
 # paths to build our "latest" docker image
 DOCKER_IMAGE=viceamazonmgr
 ## how can we use symbolic link "latest" intead? does not work with buildx
-DOCKER_TAG=0.0.1
-DOCKER_DIR=./src/vice/0.0.1
+# DOCKER_TAG=0.0.1
+# DOCKER_DIR=./src/vice/0.0.1
 FLASK_DIR=./src/flask
 NODE_DIR=./src/ui
-VICE_DIR=./src/vice
+VICE_ROOT_DIR=./src/vice
 # NVM_DIR=${HOME}/.nvm
 
 CONTEXT=.
