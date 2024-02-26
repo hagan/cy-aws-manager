@@ -3,7 +3,7 @@ include config.mk
 export
 
 GIT_HASH ?= $(shell git log --format="%h" -n 1)
-BUILDX_NAME ?= mybuilder
+BUILDX_NAME ?= default
 DOCKERHUB_USER ?= $(whoami)
 # Supporing/source Dockerfile images
 PYNODE_DKR_DIR ?= ./src/vice/dockerhub/pynode/latest
@@ -11,6 +11,7 @@ PULUMI_DKR_DIR ?= ./src/vice/dockerhub/pulumi/latest
 AWSMGR_DKR_DIR ?= ./src/vice/dockerhub/awsmgr/latest
 # The Dockerfile for our VICE application
 VICE_DKR_DIR ?= ./src/vice/latest
+
 
 # PYNODE_PARENT_IMAGE := debian
 # PYNODE_PARENT_TAG := bookworm
@@ -75,7 +76,6 @@ harbor-shell harbor-shell-ni harbor-login
 # $(error NODE_TGZ_APP is unset or empty!)
 all:
 	$(NOECHO) $(NOOP)
-	
 
 show-vars:
 	@echo "DOCKERHUB_USER: $(DOCKERHUB_USER)"
@@ -86,7 +86,10 @@ show-vars:
 	@echo "AWSMGR_VERSION: $(AWSMGR_VERSION)"
 	@echo "VICE_LATEST: $(VICE_LATEST)"
 	@echo "VICE_VERSION: $(VICE_VERSION)"
-
+### DEBUGGING ISSUES
+reset-docker-mybuilder:
+	@docker buildx rm $(BUILDX_NAME)
+	@docker buildx create $(BUILDX_NAME) --use
 ## PYNODE
 # Build pynode (Python/Node & Golang)
 build-pynode-image:
@@ -169,11 +172,15 @@ shell-pulumi-image:
 	docker run --rm -it hagan/pulumi:latest /bin/sh
 ## AWSMGR
 # build awsmgr
-build-awsmgr-image:
+build-awsmgr-image: all
+	@( cd $(CURDIR)/src/flask; poetry export -f requirements.txt --output requirements.txt )
 	@echo "Building awsmgr $(AWSMGR_VERSION) image"
-	cd $(AWSMGR_DKR_DIR); \
-	docker buildx use $(BUILDX_NAME); \
-	DOCKER_BUILDKIT=1 docker buildx build \
+	@( cd $(AWSMGR_DKR_DIR); cp $(CURDIR)/src/ui/yarn.lock .; cp $(CURDIR)/src/ui/package.json . )
+	@mv $(CURDIR)/src/flask/requirements.txt .
+
+	@cd $(AWSMGR_DKR_DIR) \
+	&& docker buildx use $(BUILDX_NAME) \
+	&& DOCKER_BUILDKIT=1 docker buildx build \
 		--progress=plain \
 		--label awsmgr \
 		--platform $(PLATFORMS) \
@@ -211,9 +218,10 @@ shell-awsmgr-image:
 # build vice
 build-vice-image: all build-flask-app build-node-app
 	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
-	@echo "Building viceawsmg $(VICE_VERSION) image"
+	@echo "$(date +%T) - Building viceawsmg $(VICE_VERSION) image from $(VICE_DKR_DIR)/Dockerfile!"
+	@echo "FLAGS: $(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) $(PUSHFLAG)"
 	@if [ ! -f "$(NODE_TGZ_APP)" ]; then (echo "ERROR: $(NODE_TGZ_APP) not found!" && exit 1); fi
-	docker buildx use $(BUILDX_NAME); \
+	@docker buildx use $(BUILDX_NAME); \
 	DOCKER_BUILDKIT=1 docker buildx build \
 		--progress=plain \
 		-f $(VICE_DKR_DIR)/Dockerfile \
@@ -248,13 +256,18 @@ shell-vice-image:
 		&& docker exec -it vice /usr/bin/bash \
 		|| docker run \
 			--env "RUNSHELL=$(RUNSHELL)" \
+			--env "AWS_KMS_KEY=$(AWS_KMS_KEY)" \
 			--name vice \
 			-p 80:80 \
 			-p 8080:8080 \
 			-p 2022:22 \
 			--volume $(CURDIR)/src/ui/dist:/mnt/dist/npms \
 			--volume $(CURDIR)/src/flask/dist:/mnt/dist/wheels \
-			--rm -it hagan/viceawsmgr:latest  /bin/sh
+			--rm -it $(DOCKERHUB_USER)/viceawsmgr:latest /bin/sh
+
+history-vice-image:
+	@echo "docker history $(DOCKERHUB_USER)/viceawsmgr:latest"
+	@docker history $(DOCKERHUB_USER)/viceawsmgr:latest
 
 shell-gunicorn-vice-image:
 	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_VERSION) as gunicorn user"
@@ -272,9 +285,10 @@ build-flask-app:
 ## helper shells into our (running vice) and inserts a new version of the awsmgr!
 reload-vice-flask-app: build-flask-app
 	@echo "Inserting $(VICE_WHL_APP)"
-	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
+	@docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	&& docker cp $(VICE_WHL_APP) vice:/mnt/dist/wheels \
 	&& docker exec -it vice /bin/sh -c 'su - gunicorn -c /usr/local/bin/update-wheel.sh' \
+	&& docker exec -it vice /bin/sh -c 'su - cyverse -c /usr/local/bin/update-wheel.sh' \
 	&& docker exec -it vice /bin/sh -c 'supervisorctl restart gunicorn' \
 	|| echo "ERROR: vice is not running, try 'make shell-vice-image'"
 

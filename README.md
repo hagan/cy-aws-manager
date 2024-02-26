@@ -76,3 +76,11 @@ Note: Only recompile step 5 unless you need to modify the Python/NodeJS/AWS/Pulu
   1) VICE applicaiton for Cyverse infrasturcture (cy-aws-vice)
   2) Lambda functions for AWS C&C
   3) Flask UX application for vice app
+
+
+
+## Issues
+
+  - using docker buildx sometimes uninstalls itself?
+    $ apt install docker-buildx-plugin
+    $ docker buildx install
