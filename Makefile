@@ -74,6 +74,7 @@ DKR_ENV_OPTIONS := --env "AWS_KMS_KEY=$(AWS_KMS_KEY)" \
 			--env "AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)" \
 			--env "AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)" \
 			--env "AWS_DEFAULT_REGION=$(AWS_DEFAULT_REGION)" \
+			--env "AWS_DEFAULT_PROFILE=$(AWS_DEFAULT_PROFILE)"
 
 # No files are created
 .PHONY: all show-vars \
