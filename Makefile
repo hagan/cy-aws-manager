@@ -70,6 +70,11 @@ else
 LOADFLAG :=
 endif
 
+DKR_ENV_OPTIONS := --env "AWS_KMS_KEY=$(AWS_KMS_KEY)" \
+			--env "AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)" \
+			--env "AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)" \
+			--env "AWS_DEFAULT_REGION=$(AWS_DEFAULT_REGION)" \
+
 # No files are created
 .PHONY: all show-vars \
 setup-yarn-cache-volume \
@@ -280,11 +285,11 @@ shell-vice-image:
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 		&& docker exec \
-		  --env "AWS_KMS_KEY=$(AWS_KMS_KEY)" \
+		  $(DKR_ENV_OPTIONS) \
 		  -it vice /usr/bin/bash \
 		|| docker run \
 			--env "RUNSHELL=$(RUNSHELL)" \
-			--env "AWS_KMS_KEY=$(AWS_KMS_KEY)" \
+			$(DKR_ENV_OPTIONS) \
 			--name vice \
 			-p 80:80 \
 			-p 8080:8080 \
@@ -297,13 +302,40 @@ history-vice-image:
 	@echo "docker history $(DOCKERHUB_USER)/viceawsmgr:latest"
 	@docker history $(DOCKERHUB_USER)/viceawsmgr:latest
 
+#
+# 		/usr/bin/bash
+# 	    'su - gunicorn -c ". /home/gunicorn/envs/flask-env/bin/activate && export FLASK_APP='awsmgr.app' && exec /usr/bin/bash"'
+
 shell-gunicorn-vice-image:
 	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) as gunicorn user"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
-	  && docker exec -it vice /bin/sh -c \
-	    'su - gunicorn -c ". /home/gunicorn/envs/flask-env/bin/activate && export FLASK_APP='awsmgr.app' && exec /usr/bin/bash"' \
-	  || echo "vice image not running!"
+	  && docker exec \
+	    $(DKR_ENV_OPTIONS) \
+		-it vice /usr/bin/su \
+		--whitelist-environment AWS_KMS_KEY \
+		--whitelist-environment AWS_ACCESS_KEY_ID \
+		--whitelist-environment AWS_SECRET_ACCESS_KEY \
+		--whitelist-environment AWS_DEFAULT_REGION \
+		--whitelist-environment AWS_SESSION_TOKEN \
+		-l gunicorn \
+	  || { echo "ERROR: vice image not running!"; exit 1; }
+
+shell-cyverse-vice-image:
+	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) as cyverse user"
+	cd $(VICE_DKR_DIR); \
+	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
+	  && docker exec \
+	    $(DKR_ENV_OPTIONS) \
+		-it vice /usr/bin/su \
+		--whitelist-environment AWS_KMS_KEY \
+		--whitelist-environment AWS_ACCESS_KEY_ID \
+		--whitelist-environment AWS_SECRET_ACCESS_KEY \
+		--whitelist-environment AWS_DEFAULT_REGION \
+		--whitelist-environment AWS_SESSION_TOKEN \
+		-l cyverse \
+	  || { echo "ERROR: vice image not running!"; exit 1; }
+
 
 build-flask-app:
 	@echo "Compile/build package for flask..."
