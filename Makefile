@@ -221,7 +221,8 @@ build-awsmgr-image: all
 		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-$(GIT_HASH) \
 		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) \
 		--tag $(DOCKERHUB_USER)/awsmgr:latest \
-		$(PUSHFLAG) .
+		$(PUSHFLAG) . \
+	&& rm requirements.txt
 # Tag awsmgr
 tag-awsmgr-image:
 	@echo "Tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) as latest"
