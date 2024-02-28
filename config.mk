@@ -17,7 +17,7 @@ VICE_DKR_VERSION=latest
 # DOCKER_DIR=./src/vice/0.0.1
 FLASK_DIR=./src/flask
 NODE_DIR=./src/ui
-VICE_ROOT_DIR=./src/vice
+VICE_DKR_DIR=./src/vice
 # NVM_DIR=${HOME}/.nvm
 
 CONTEXT=.

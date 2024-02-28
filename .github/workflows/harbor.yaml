@@ -61,7 +61,7 @@ jobs:
           echo "     VICE_PARENT_TAG: ${{ steps.vars.outputs.VICE_PARENT_TAG }}"
           echo "           VICE_NAME: ${{ steps.vars.outputs.VICE_NAME }}"
           echo "    VICE_DKR_VERSION: ${{ steps.vars.outputs.VICE_DKR_VERSION }}"
-          echo "       VICE_ROOT_DIR: ${{ steps.vars.outputs.VICE_ROOT_DIR }}"
+          echo "       VICE_DKR_DIR: ${{ steps.vars.outputs.VICE_DKR_DIR }}"
           echo "           FLASK_DIR: ${{ steps.vars.outputs.FLASK_DIR}}"
           echo "            NODE_DIR: ${{ steps.vars.outputs.NODE_DIR}}"
           echo "             CONTEXT: ${{ steps.vars.outputs.CONTEXT}}"
@@ -116,7 +116,7 @@ jobs:
           echo "VICE_NAME=${{ steps.vars.outputs.VICE_NAME }}"
           echo "VICE_NAME=${{ steps.vars.outputs.VICE_NAME }}"
           echo "VICE_DKR_VERSION=${{ steps.vars.outputs.VICE_DKR_VERSION }}"
-          echo "VICE_ROOT_DIR=${{ steps.vars.outputs.VICE_ROOT_DIR }}"
+          echo "VICE_DKR_DIR=${{ steps.vars.outputs.VICE_DKR_DIR }}"
         env:
           STEP_DEBUG: true
 
