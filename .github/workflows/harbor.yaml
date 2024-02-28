@@ -123,7 +123,7 @@ jobs:
       - name: Verify files/submodules are okay
         id: verify_things_are_as_they_should_be
         env:
-          DOCKER_DIR: ${{ steps.vars.outputs.DOCKER_DIR }}
+          VICE_DKR_DIR: ${{ steps.vars.outputs.VICE_DKR_DIR }}
         run: |
           test -d ./src/flask && test -d ./src/flask/dist && ls ./src/flask/dist
           test -d ./src/flask && test -d ./src/ui/dist && ls ./src/ui/dist
@@ -138,7 +138,7 @@ jobs:
           #! context: latest
           context: ${{ steps.vars.outputs.CONTEXT }}
           #! todo: simplfy path
-          file: ${{ steps.vars.outputs.DOCKER_DIR }}/Dockerfile
+          file: ${{ steps.vars.outputs.VICE_DKR_DIR }}/Dockerfile
           builder: ${{ steps.buildx.outputs.name }}
           push: true
           platforms: linux/amd64,linux/arm64
