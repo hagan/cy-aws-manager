@@ -18,7 +18,7 @@ VICE_DKR_VERSION=latest
 FLASK_DIR=./src/flask
 NODE_DIR=./src/ui
 VICE_DIR=./src/vice
-VICE_DKR_DIR=./src/vice/latest
+VICE_DKR_DIR=./src/vice/versions/bookworm.v2
 # NVM_DIR=${HOME}/.nvm
 
 CONTEXT=.
