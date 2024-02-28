@@ -19,41 +19,44 @@ jobs:
     #!   CONTEXT: '.'
     #!   PIP_WHEEL_FILENAME: 'appstreamer-0.1.1-py3-none-any.whl'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      -
+        name: Checkout
+        uses: actions/checkout@v4
         with:
-          node-version: 20.x
           submodules: true
           lfs: true
           ssh-key: ${{ secrets.ACCESS_KEY }}
-
-      - name: Install Make
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      -
+        name: Install Make
         run: sudo apt-get update && sudo apt-get install -y make git-lfs
-
-      - name: Update submodules
+      -
+        name: Update submodules
         run: |
           git submodule update --init --recursive
-
-      - name: Set up Git LFS
+      -
+        name: Set up Git LFS
         run: |
           git lfs pull
           ls -lah ./src/flask/dist
           ls -lah ./src/ui/dist
-
-      # - name: Load config.mk file
-      #   uses: falti/dotenv-action@v1.0.4
-      #   with:
-      #     path: config.mk
-      #     keys-case: "bypass"
-      #     log-variables: true
-      #     export-variables: true
-
-      - name: Extract Variables from config.mk
+    # -
+    #    name: Load config.mk file
+    #    uses: falti/dotenv-action@v1.0.4
+    #    with:
+    #      path: config.mk
+    #      keys-case: "bypass"
+    #      log-variables: true
+    #      export-variables: true
+      -
+        name: Extract Variables from config.mk
         id: vars
         run: |
           . ./extract-vars.sh config.mk
-
-      - name: Show exported variables from config.mk
+      -
+        name: Show exported variables from config.mk
         run: |
           echo "Extracted vars from config.mk..."
           echo "             COMMENT: ${{ steps.vars.outputs.COMMENT}}"
@@ -74,22 +77,22 @@ jobs:
       #     mkdir -p ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/
       #     cp ${{ steps.vars.outputs.FLASK_DIR}}/dist/${{ steps.vars.outputs.PIP_WHEEL_FILENAME }} ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/.
       #     ls -lah ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask
-
-      - name: Set up Docker Buildx
+      -
+        name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v2.8.0
+        uses: docker/setup-buildx-action@v3
         env:
           STEP_DEBUG: true
-
-      - name: Cache Docker layers
-        uses: actions/cache@v2
+      -
+        name: Cache Docker layers
+        uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-
-
-      - name: Login to harbor
+      -
+        name: Login to harbor
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v1
         with:
@@ -109,7 +112,8 @@ jobs:
       #!   echo "PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}"
       #!   echo "APPSTREAM_LAMBDA_API=${{ env.APPSTREAM_LAMBDA_API }}"
 
-      - name: Print environment variables
+      -
+        name: Print environment variables
         run: |
           echo "VICE_PARENT_IMAGE=${{ steps.vars.outputs.VICE_PARENT_IMAGE }}"
           echo "VICE_PARENT_TAG=${{ steps.vars.outputs.VICE_PARENT_TAG }}"
@@ -120,7 +124,8 @@ jobs:
         env:
           STEP_DEBUG: true
 
-      - name: Verify files/submodules are okay
+      -
+        name: Verify files/submodules are okay
         id: verify_things_are_as_they_should_be
         env:
           VICE_DKR_DIR: ${{ steps.vars.outputs.VICE_DKR_DIR }}
@@ -129,7 +134,8 @@ jobs:
           test -d ./src/flask && test -d ./src/ui/dist && ls ./src/ui/dist
           test -d ./src/vice && test -d ./src/vice/latest && ls ./src/vice/latest
 
-      - name: Build and push latest
+      -
+        name: Build and push latest
         id: docker_build_latest
         uses: docker/build-push-action@v4.1.1
         env:
@@ -152,6 +158,6 @@ jobs:
             VICE_DKR_DIR=${{ steps.vars.outputs.VICE_DKR_DIR }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
-
-      - name: Image digest
+      -
+        name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
