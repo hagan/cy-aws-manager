@@ -13,11 +13,8 @@ LATEST_AWSMGR_DKR_DIR ?= ./src/vice/dockerhub/awsmgr/latest
 # The Dockerfile for our VICE application
 LATEST_VICE_DKR_DIR ?= ./src/vice/latest
 
-
-# PYNODE_PARENT_IMAGE := debian
-# PYNODE_PARENT_TAG := bookworm
 PYNODE_PARENT_IMAGE := python
-PYNODE_PARENT_TAG := 3.11.7-bookworm
+PYNODE_PARENT_TAG := 3.11.8-bookworm
 
 PYNODE_DKR_VERSION ?= $(shell readlink $(LATEST_PYNODE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
 PYNODE_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_PYNODE_DKR_DIR))"
@@ -276,11 +273,16 @@ clean-vice-image:
 	docker rmi $(DOCKERHUB_USER)/viceawsmgr:latest 2>/dev/null || echo "Image viceawsmgr:latest has already been removed."
 	@echo "To complete removal, run: docker images prune -a"
 
-push-vice-image:
+docker-push-vice-image:
 	@echo "Pushing viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:latest to hub.docker.com"
 	cd $(VICE_DKR_DIR); \
 	docker push $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION); \
 	docker push $(DOCKERHUB_USER)/viceawsmgr:latest
+
+harbor-push-vice-image:
+	@echo "Pushing viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:latest to harbor"
+	docker tag $(DOCKERHUB_USER)/viceawsmgr:latest harbor.cyverse.org/vice/appstream:latest
+	docker push harbor.cyverse.org/vice/appstream:latest
 
 shell-vice-image:
 	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) -- RUNSHELL=$(RUNSHELL)"
