@@ -129,34 +129,29 @@ jobs:
           test -d ./src/flask && test -d ./src/ui/dist && ls ./src/ui/dist
           test -d ./src/vice && test -d ./src/vice/latest && ls ./src/vice/latest
 
-      # - name: Build and push latest
-      #   id: docker_build_latest
-      #   uses: docker/build-push-action@v4.1.1
-      #   env:
-      #     STEP_DEBUG: true
-      #   with:
-      #     #! context: latest
-      #     context: ${{ steps.vars.outputs.CONTEXT }}
-      #     #! todo: simplfy path
-      #     file: ${{ steps.vars.outputs.DOCKER_DIR }}/Dockerfile
-      #     builder: ${{ steps.buildx.outputs.name }}
-      #     push: true
-      #     platforms: linux/amd64,linux/arm64
-      #     #! how can we make appstream:latest change to our environment
-      #     tags: harbor.cyverse.org/vice/appstream:latest
-      #     build-args: |
-      #       DOCKER_IMAGE=${{ steps.vars.outputs.DOCKER_IMAGE }}
-      #       DOCKER_TAG=${{ steps.vars.outputs.DOCKER_TAG }}
-      #       CONTEXT=${{ steps.vars.outputs.CONTEXT }}
-      #       DOCKER_DIR=${{ steps.vars.outputs.DOCKER_DIR }}
-      #       SRC_DOCKER_IMAGE=${{ steps.vars.outputs.SRC_DOCKER_IMAGE}}
-      #       SRC_DOCKER_VER=${{ steps.vars.outputs.SRC_DOCKER_VER}}
-      #     #! removed
-      #     #! PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}
-      #     #! APPSTREAM_API=${{ env.APPSTREAM_API }}
-      #     #! APPSTREAM_LAMBDA_ROOT_URL=${{ env.APPSTREAM_LAMBDA_ROOT_URL }}
-      #     cache-from: type=local,src=/tmp/.buildx-cache
-      #     cache-to: type=local,dest=/tmp/.buildx-cache
+      - name: Build and push latest
+        id: docker_build_latest
+        uses: docker/build-push-action@v4.1.1
+        env:
+          STEP_DEBUG: true
+        with:
+          #! context: latest
+          context: ${{ steps.vars.outputs.CONTEXT }}
+          #! todo: simplfy path
+          file: ${{ steps.vars.outputs.DOCKER_DIR }}/Dockerfile
+          builder: ${{ steps.buildx.outputs.name }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          #! how can we make appstream:latest change to our environment
+          tags: |
+            harbor.cyverse.org/vice/appstream:latest
+          build-args: |
+            VICE_PARENT_IMAGE=${{ steps.vars.outputs.VICE_PARENT_IMAGE }}
+            VICE_PARENT_TAG=${{ steps.vars.outputs.VICE_PARENT_TAG }}
+            VICE_DKR_VERSION=${{ steps.vars.outputs.VICE_DKR_VERSION }}
+            VICE_DKR_DIR=${{ steps.vars.outputs.VICE_DKR_DIR }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
 
-      # - name: Image digest
-      #   run: echo ${{ steps.docker_build.outputs.digest }}
+      - name: Image digest
+        run: echo ${{ steps.docker_build.outputs.digest }}
