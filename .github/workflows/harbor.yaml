@@ -56,24 +56,23 @@ jobs:
         run: |
           echo "Extracted vars from config.mk..."
           echo "             COMMENT: ${{ steps.vars.outputs.COMMENT}}"
-          echo "    SRC_DOCKER_IMAGE: ${{ steps.vars.outputs.SRC_DOCKER_IMAGE }}"
-          echo "      SRC_DOCKER_VER: ${{ steps.vars.outputs.SRC_DOCKER_VER }}"
-          echo "        DOCKER_IMAGE: ${{ steps.vars.outputs.DOCKER_IMAGE }}"
-          echo "          DOCKER_TAG: ${{ steps.vars.outputs.DOCKER_TAG }}"
-          echo "          DOCKER_DIR: ${{ steps.vars.outputs.DOCKER_DIR }}"
+          echo "   VICE_PARENT_IMAGE: ${{ steps.vars.outputs.VICE_PARENT_IMAGE }}"
+          echo "     VICE_PARENT_TAG: ${{ steps.vars.outputs.VICE_PARENT_TAG }}"
+          echo "           VICE_NAME: ${{ steps.vars.outputs.VICE_NAME }}"
+          echo "    VICE_DKR_VERSION: ${{ steps.vars.outputs.VICE_DKR_VERSION }}"
+          echo "       VICE_ROOT_DIR: ${{ steps.vars.outputs.VICE_ROOT_DIR }}"
           echo "           FLASK_DIR: ${{ steps.vars.outputs.FLASK_DIR}}"
           echo "            NODE_DIR: ${{ steps.vars.outputs.NODE_DIR}}"
-          echo "            VICE_DIR: ${{ steps.vars.outputs.VICE_DIR}}"
-          echo "             NVM_DIR: ${{ steps.vars.outputs.NVM_DIR}}"
           echo "             CONTEXT: ${{ steps.vars.outputs.CONTEXT}}"
-          echo "  PIP_WHEEL_FILENAME: ${{ steps.vars.outputs.PIP_WHEEL_FILENAME }}"
+#          echo "  PIP_WHEEL_FILENAME: ${{ steps.vars.outputs.PIP_WHEEL_FILENAME }}"
 
-      - name: Copy whl from our submodule dist tracked in LFS
-        id: flaskwheel
-        run: |
-          mkdir -p ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/
-          cp ${{ steps.vars.outputs.FLASK_DIR}}/dist/${{ steps.vars.outputs.PIP_WHEEL_FILENAME }} ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/.
-          ls -lah ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask
+      ## Commented out (Dockerfile now installs wheel from /tmp)
+      # - name: Copy whl from our submodule dist tracked in LFS
+      #   id: flaskwheel
+      #   run: |
+      #     mkdir -p ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/
+      #     cp ${{ steps.vars.outputs.FLASK_DIR}}/dist/${{ steps.vars.outputs.PIP_WHEEL_FILENAME }} ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask/.
+      #     ls -lah ${{ steps.vars.outputs.DOCKER_DIR }}/dist/flask
 
       - name: Set up Docker Buildx
         id: buildx
@@ -111,52 +110,52 @@ jobs:
 
       - name: Print environment variables
         run: |
-          echo "DOCKER_IMAGE=${{ steps.vars.outputs.DOCKER_IMAGE }}"
-          echo "DOCKER_TAG=${{ steps.vars.outputs.DOCKER_TAG }}"
-          echo "CONTEXT=${{ steps.vars.outputs.CONTEXT }}"
-          echo "DOCKER_DIR=${{ steps.vars.outputs.DOCKER_DIR }}"
-          echo "SRC_DOCKER_IMAGE=${{ steps.vars.outputs.SRC_DOCKER_IMAGE}}"
-          echo "SRC_DOCKER_VER=${{ steps.vars.outputs.SRC_DOCKER_VER}}"
+          echo "VICE_PARENT_IMAGE=${{ steps.vars.outputs.VICE_PARENT_IMAGE }}"
+          echo "VICE_PARENT_TAG=${{ steps.vars.outputs.VICE_PARENT_TAG }}"
+          echo "VICE_NAME=${{ steps.vars.outputs.VICE_NAME }}"
+          echo "VICE_NAME=${{ steps.vars.outputs.VICE_NAME }}"
+          echo "VICE_DKR_VERSION=${{ steps.vars.outputs.VICE_DKR_VERSION }}"
+          echo "VICE_ROOT_DIR=${{ steps.vars.outputs.VICE_ROOT_DIR }}"
         env:
           STEP_DEBUG: true
 
-      - name: Verify files/submodules are okay
-        id: verify_things_are_as_they_should_be
-        env:
-          DOCKER_DIR: ${{ steps.vars.outputs.DOCKER_DIR }}
-        run: |
-          test -d ./src/flask && test -d ./src/flask/dist && ls ./src/flask/dist
-          test -d ./src/flask && test -d ./src/ui/dist && ls ./src/ui/dist
-          test -d ./src/vice && test -d ./src/vice/latest && ls ./src/vice/latest
+      # - name: Verify files/submodules are okay
+      #   id: verify_things_are_as_they_should_be
+      #   env:
+      #     DOCKER_DIR: ${{ steps.vars.outputs.DOCKER_DIR }}
+      #   run: |
+      #     test -d ./src/flask && test -d ./src/flask/dist && ls ./src/flask/dist
+      #     test -d ./src/flask && test -d ./src/ui/dist && ls ./src/ui/dist
+      #     test -d ./src/vice && test -d ./src/vice/latest && ls ./src/vice/latest
 
-      - name: Build and push latest
-        id: docker_build_latest
-        uses: docker/build-push-action@v4.1.1
-        env:
-          STEP_DEBUG: true
-        with:
-          #! context: latest
-          context: ${{ steps.vars.outputs.CONTEXT }}
-          #! todo: simplfy path
-          file: ${{ steps.vars.outputs.DOCKER_DIR }}/Dockerfile
-          builder: ${{ steps.buildx.outputs.name }}
-          push: true
-          platforms: linux/amd64,linux/arm64
-          #! how can we make appstream:latest change to our environment
-          tags: harbor.cyverse.org/vice/appstream:latest
-          build-args: |
-            DOCKER_IMAGE=${{ steps.vars.outputs.DOCKER_IMAGE }}
-            DOCKER_TAG=${{ steps.vars.outputs.DOCKER_TAG }}
-            CONTEXT=${{ steps.vars.outputs.CONTEXT }}
-            DOCKER_DIR=${{ steps.vars.outputs.DOCKER_DIR }}
-            SRC_DOCKER_IMAGE=${{ steps.vars.outputs.SRC_DOCKER_IMAGE}}
-            SRC_DOCKER_VER=${{ steps.vars.outputs.SRC_DOCKER_VER}}
-          #! removed
-          #! PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}
-          #! APPSTREAM_API=${{ env.APPSTREAM_API }}
-          #! APPSTREAM_LAMBDA_ROOT_URL=${{ env.APPSTREAM_LAMBDA_ROOT_URL }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+      # - name: Build and push latest
+      #   id: docker_build_latest
+      #   uses: docker/build-push-action@v4.1.1
+      #   env:
+      #     STEP_DEBUG: true
+      #   with:
+      #     #! context: latest
+      #     context: ${{ steps.vars.outputs.CONTEXT }}
+      #     #! todo: simplfy path
+      #     file: ${{ steps.vars.outputs.DOCKER_DIR }}/Dockerfile
+      #     builder: ${{ steps.buildx.outputs.name }}
+      #     push: true
+      #     platforms: linux/amd64,linux/arm64
+      #     #! how can we make appstream:latest change to our environment
+      #     tags: harbor.cyverse.org/vice/appstream:latest
+      #     build-args: |
+      #       DOCKER_IMAGE=${{ steps.vars.outputs.DOCKER_IMAGE }}
+      #       DOCKER_TAG=${{ steps.vars.outputs.DOCKER_TAG }}
+      #       CONTEXT=${{ steps.vars.outputs.CONTEXT }}
+      #       DOCKER_DIR=${{ steps.vars.outputs.DOCKER_DIR }}
+      #       SRC_DOCKER_IMAGE=${{ steps.vars.outputs.SRC_DOCKER_IMAGE}}
+      #       SRC_DOCKER_VER=${{ steps.vars.outputs.SRC_DOCKER_VER}}
+      #     #! removed
+      #     #! PIP_WHEEL_FILENAME=${{ env.PIP_WHEEL_FILENAME }}
+      #     #! APPSTREAM_API=${{ env.APPSTREAM_API }}
+      #     #! APPSTREAM_LAMBDA_ROOT_URL=${{ env.APPSTREAM_LAMBDA_ROOT_URL }}
+      #     cache-from: type=local,src=/tmp/.buildx-cache
+      #     cache-to: type=local,dest=/tmp/.buildx-cache
 
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
+      # - name: Image digest
+      #   run: echo ${{ steps.docker_build.outputs.digest }}

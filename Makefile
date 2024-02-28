@@ -257,7 +257,7 @@ build-vice-image: all build-flask-app build-node-app
 	DOCKER_BUILDKIT=1 docker buildx build \
 		--progress=plain \
 		-f $(VICE_DKR_DIR)/Dockerfile \
-		--label viceawsmgr \
+		--label $(VICE_NAME) \
 		--platform $(PLATFORMS) \
 		--build-arg VICE_PARENT_IMAGE=hagan/awsmgr \
 		--build-arg VICE_PARENT_TAG=$(AWSMGR_DKR_VERSION) \
