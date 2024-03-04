@@ -11,7 +11,7 @@ PULUMI_VERSION=3.107.0
 
 # paths to build our "latest" docker image
 VICE_NAME=viceawsmgr
-VICE_DKR_VERSION=latest
+
 ## how can we use symbolic link "latest" intead? does not work with buildx
 # DOCKER_TAG=0.0.1
 # DOCKER_DIR=./src/vice/0.0.1

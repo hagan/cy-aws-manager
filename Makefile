@@ -25,7 +25,7 @@ PULUMI_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_PULUMI_DKR_DIR))"
 AWSMGR_DKR_VERSION ?= $(shell readlink $(LATEST_AWSMGR_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
 AWSMGR_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_AWSMGR_DKR_DIR))"
 
-VICE_DKR_VERSION ?= $(shell readlink $(LATEST_VICE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
+VICE_DKR_VERSION ?=  $(shell readlink $(LATEST_VICE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
 VICE_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_VICE_DKR_DIR))"
 
 ## for apple uncomment 
@@ -40,7 +40,7 @@ APPSTREAM_LAMBDA_API := $(shell echo $(APPSTREAM_LAMBDA_API) | sed "s/'//g")
 
 
 VICE_WHL_APP := $(shell ls -lhtp $(CURDIR)/src/flask/dist/*.whl 2>/dev/null | head -n1 | awk '{print $$9}' || true)
-NODE_TGZ_APP := $(shell ls -lhtp $(CURDIR)/src/ui/dist/*.tgz 2>/dev/null | head -n1 | awk '{print $$9}' || true)
+NODE_TGZ_APP := $(shell find $(realpath $(CURDIR)/src/ui/dist) -name '*.tgz' -type f -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2- || true)
 
 ifeq ($(NOCACHE),yes)
 CACHEFLAG := --no-cache
@@ -48,10 +48,10 @@ else
 CACHEFLAG :=
 endif
 
-ifeq ($(DOCKERHUB),yes)
-PUSHFLAG := --push
-else
+ifeq ($(SKIPDOCKERHUB),yes)
 PUSHFLAG :=
+else
+PUSHFLAG := --push
 endif
 
 ifeq ($(NOPULL),yes)
@@ -60,16 +60,31 @@ else
 PULLFLAG :=
 endif
 
-ifeq ($(LOCAL),yes)
+ifeq ($(LOADLOCAL),yes)
 LOADFLAG := --load
+@echo "cannot use push flag with LOADLOCAL=yes"
+PUSHFLAG :=
 PLATFORMS := $(LOCAL_PLATFORM)
 else
 LOADFLAG :=
 endif
 
+ifeq ($(SKIPNODEBUILD),yes)
+NODEBUILD :=
+else
+NODEBUILD := build-node-app
+endif
+
+ifeq ($(SKIPFLASKBUILD),yes)
+FLASKBUILD :=
+else
+FLASKBUILD := build-flask-app
+endif
+
 DKR_ENV_OPTIONS := --env "AWS_KMS_KEY=$(AWS_KMS_KEY)" \
 			--env "AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)" \
 			--env "AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)" \
+			--env "AWS_SESSION_TOKEN"=$(AWS_SESSION_TOKEN) \
 			--env "AWS_DEFAULT_REGION=$(AWS_DEFAULT_REGION)" \
 			--env "AWS_DEFAULT_PROFILE=$(AWS_DEFAULT_PROFILE)"
 
@@ -128,6 +143,9 @@ build-pynode-image:
 		--platform $(PLATFORMS) \
 		--build-arg PYNODE_PARENT_IMAGE=$(PYNODE_PARENT_IMAGE) \
 		--build-arg PYNODE_PARENT_TAG=$(PYNODE_PARENT_TAG) \
+		--build-arg PYNODE_NAME=$(DOCKERHUB_USER)/pynode \
+		--build-arg PYNODE_TAG=$(PYNODE_DKR_VERSION)-$(GIT_HASH) \
+		--build-arg CACHEBUST=$(shell date +%s) \
 		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
 		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)-$(GIT_HASH) \
 		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION) \
@@ -169,6 +187,9 @@ build-pulumi-image:
 		--build-arg PULUMI_VERSION=$(PULUMI_VERSION) \
 		--build-arg PULUMI_PARENT_IMAGE=hagan/pynode \
 		--build-arg PULUMI_PARENT_TAG=$(PYNODE_DKR_VERSION) \
+		--build-arg PULUMI_NAME=$(DOCKERHUB_USER)/pulumi \
+		--build-arg PULUMI_TAG=$(PULUMI_DKR_VERSION)-$(GIT_HASH) \
+		--build-arg CACHEBUST=$(shell date +%s) \
 		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
 		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)-$(GIT_HASH) \
 		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION) \
@@ -200,26 +221,43 @@ shell-pulumi-image:
 	docker run --rm -it hagan/pulumi:latest /bin/sh
 ## AWSMGR
 # build awsmgr
-build-awsmgr-image: all
-	@( cd $(CURDIR)/src/flask; poetry export -f requirements.txt --output requirements.txt )
-	@echo "Building awsmgr $(AWSMGR_DKR_VERSION) image"
-	@( cd $(AWSMGR_DKR_DIR); cp $(CURDIR)/src/ui/yarn.lock .; cp $(CURDIR)/src/ui/package.json . )
-	@mv $(CURDIR)/src/flask/requirements.txt .
+build-awsmgr-image: all $(NODEBUILD)
+	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
+	@( \
+		echo "Creating requirements.txt from poetry pyproject.toml file.."; \
+		cd $(CURDIR)/src/flask; \
+		poetry export -f requirements.txt --output requirements.txt; \
+		cd $(CURDIR)/$(AWSMGR_DKR_DIR); \
+		mv $(CURDIR)/src/flask/requirements.txt .; \
+	)
 
+	@( \
+		echo "Copying yarn files from $(CURDIR)/src/ui into $(AWSMGR_DKR_DIR) for awsmgr docker container build step.."; \
+		cd $(AWSMGR_DKR_DIR); \
+		cp -f $(CURDIR)/src/ui/yarn.lock .; \
+		cp -f $(CURDIR)/src/ui/package.json .; \
+		cp -f $(CURDIR)/src/ui/.yarnrc.yml .; \
+		cp -rpf $(CURDIR)/src/ui/.yarn .; \
+	)
+	@echo "Copying $(NODE_TGZ_APP) into awsmgr space for container build step.."
+	@cp $(NODE_TGZ_APP) $(CURDIR)/src/vice/dockerhub/awsmgr/latest/.
+	@echo "Building awsmgr $(AWSMGR_DKR_VERSION) image"
 	@cd $(AWSMGR_DKR_DIR) \
-	&& docker buildx use $(BUILDX_NAME) \
-	&& DOCKER_BUILDKIT=1 docker buildx build \
-		--progress=plain \
-		--label awsmgr \
-		--platform $(PLATFORMS) \
-		--build-arg AWSMGR_PARENT_IMAGE=hagan/pulumi \
-		--build-arg AWSMGR_PARENT_TAG=$(PULUMI_DKR_VERSION) \
-		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
-		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-$(GIT_HASH) \
-		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) \
-		--tag $(DOCKERHUB_USER)/awsmgr:latest \
-		$(PUSHFLAG) . \
-	&& rm requirements.txt
+		&& docker buildx use $(BUILDX_NAME) \
+		&& DOCKER_BUILDKIT=1 docker buildx build \
+			--progress=plain \
+			--label awsmgr \
+			--platform $(PLATFORMS) \
+			--build-arg AWSMGR_PARENT_IMAGE=hagan/pulumi \
+			--build-arg AWSMGR_PARENT_TAG=$(PULUMI_DKR_VERSION) \
+			--build-arg AWSMGR_NAME=$(DOCKERHUB_USER)/awsmgr \
+			--build-arg AWSMGR_TAG=$(AWSMGR_DKR_VERSION)-$(GIT_HASH) \
+			--build-arg CACHEBUST=$(shell date +%s) \
+			$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
+			--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-$(GIT_HASH) \
+			--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) \
+			--tag $(DOCKERHUB_USER)/awsmgr:latest \
+			$(PUSHFLAG) .
 # Tag awsmgr
 tag-awsmgr-image:
 	@echo "Tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) as latest"
@@ -245,7 +283,7 @@ shell-awsmgr-image:
 	docker run --rm -it hagan/awsmgr:latest /bin/sh
 ## vice
 # build vice
-build-vice-image: all build-flask-app build-node-app
+build-vice-image: all $(FLASKBUILD) $(NODEBUILD)
 	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
 	@echo "$(date +%T) - Building viceawsmg $(VICE_DKR_VERSION) image from $(VICE_DKR_DIR)/Dockerfile!"
 	@echo "FLAGS: $(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) $(PUSHFLAG)"
@@ -258,8 +296,10 @@ build-vice-image: all build-flask-app build-node-app
 		--platform $(PLATFORMS) \
 		--build-arg VICE_PARENT_IMAGE=hagan/awsmgr \
 		--build-arg VICE_PARENT_TAG=$(AWSMGR_DKR_VERSION) \
-		--build-arg VICE_DKR_VERSION=$(VICE_DKR_VERSION) \
+		--build-arg VICE_NAME=viceawsmgr \
+		--build-arg VICE_TAG=$(VICE_DKR_VERSION)-$(GIT_HASH) \
 		--build-arg VICE_DKR_DIR=$(VICE_DKR_DIR) \
+		--build-arg CACHEBUST=$(shell date +%s) \
 		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
 		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) \
 		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION)-$(GIT_HASH) \
@@ -284,13 +324,27 @@ harbor-push-vice-image:
 	docker tag $(DOCKERHUB_USER)/viceawsmgr:latest harbor.cyverse.org/vice/appstream:latest
 	docker push harbor.cyverse.org/vice/appstream:latest
 
+shell-vice-image-sim:
+	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) 'sim' -- RUNSHELL=$(RUNSHELL)"
+	cd $(VICE_DKR_DIR); \
+	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
+		&& docker exec \
+			$(DKR_ENV_OPTIONS) \
+			-it vice /usr/bin/bash \
+		|| docker run \
+			$(DKR_ENV_OPTIONS) \
+			--quiet \
+			--name vice \
+			-p 80:80 \
+			--rm -it $(DOCKERHUB_USER)/viceawsmgr:latest /bin/sh
+
 shell-vice-image:
 	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) -- RUNSHELL=$(RUNSHELL)"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 		&& docker exec \
-		  $(DKR_ENV_OPTIONS) \
-		  -it vice /usr/bin/bash \
+			$(DKR_ENV_OPTIONS) \
+			-it vice /usr/bin/bash \
 		|| docker run \
 			--env "RUNSHELL=$(RUNSHELL)" \
 			$(DKR_ENV_OPTIONS) \
@@ -375,10 +429,12 @@ reload-vice-node-app: build-node-app
 	@echo "Inserting $(NODE_TGZ_APP)"
 	@docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	&& docker cp $(NODE_TGZ_APP) vice:/mnt/dist/npms \
-	&& docker exec -it vice /bin/sh -c 'su - node -c /usr/local/bin/update-npm.sh' \
-	|| { echo "Error while updating package!"; exit 1; } \
-	&& docker exec -it vice /bin/sh -c 'supervisorctl restart express' \
-	|| { echo "ERROR: trying to restart express"; exit 1; }
+	&& docker cp $(VICE_DKR_DIR)/usr/local/bin/update-npm.sh vice:/usr/local/bin/update-npm.sh \
+	&& docker exec -it vice /bin/sh -c 'su - node -c /usr/local/bin/update-npm.sh'
+#  \
+# || { echo "Error while updating package!"; exit 1; } \
+# && docker exec -it vice /bin/sh -c 'supervisorctl restart express' \
+# || { echo "ERROR: trying to restart express"; exit 1; }
 
 compile:
 	@echo "Building flask wheel... $(NVM_DIR)"

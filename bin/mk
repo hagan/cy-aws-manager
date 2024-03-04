@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+
+## this runs the last make build you ran in project
+
+if [ -z ${PRJ_ROOT_DIR} ]; then
+  echo >&2 "ERROR: Cannot run, missing PRJ_ROOT_DIR environment variables"
+  exit 1
+fi
+
+# Initialize flags
+pynode=false
+pulumi=false
+awsmgr=false
+vice=false
+skip_rebuild_flask='yes'
+skip_rebuild_node='yes'
+
+build=true
+shell=false
+
+command="$1"
+shift
+
+parse_long_options() {
+    for arg in "$@"; do
+        case $arg in
+            --rebuild-flask)
+                skip_rebuild_flask='no'
+                ;;
+            --rebuild-node)
+                skip_rebuild_node='no'
+                ;;
+            *)
+                # Ignore unknown options
+                ;;
+        esac
+    done
+}
+
+# First, handle long options
+parse_long_options "$@"
+
+# Now, handle short options
+while getopts "fns" opt; do
+    case ${opt} in
+        f)
+            skip_rebuild_flask='no'
+            ;;
+        n)
+            skip_rebuild_node='no'
+            ;;
+        s)
+            if [[ $command == 'all' ]]; then
+              echo >&2 "ERROR: cannot use 'all' with +s"
+              exit 1
+            fi
+            build=false
+            shell=true
+            ;;
+        *)
+            # Handle error: unknown option
+            exit 1
+            ;;
+    esac
+done
+
+
+# Loop through arguments and process them
+case $command in
+    pynode)
+        pynode=true
+        pulumi=false
+        awsmgr=false
+        vice=false
+        ;;
+    pulumi)
+        pynode=false
+        pulumi=true
+        awsmgr=false
+        vice=false
+        ;;
+    awsmgr)
+        pynode=false
+        pulumi=false
+        awsmgr=true
+        vice=false
+        ;;
+    vice)
+        pynode=false
+        pulumi=false
+        awsmgr=false
+        vice=true
+        ;;
+    all)
+        pynode=true
+        pulumi=true
+        awsmgr=true
+        vice=true
+        ;;
+    *)
+        # Ignore unknown options / handle error
+        exit 1
+        ;;
+esac
+
+
+# echo "skip_rebuild_flask = $skip_rebuild_flask"
+# echo "skip_rebuild_node = $skip_rebuild_node"
+# echo "pynode = $pynode"
+# echo "pulumi = $pulumi"
+# echo "awsmgr = $awsmgr"
+# echo "vice = $vice"
+
+if [[ ( ( ${pynode} == true ) && ( ${build} == true ) ) ]]; then
+  echo "Building pynode"
+  pushd ${PRJ_ROOT_DIR}
+  make SKIPFLASKBUILD=${skip_rebuild_flask} SKIPNODEBUILD=${skip_rebuild_node} build-pynode-image
+  popd
+  echo "pulumi pynode complete"
+elif [[ ( ( ${pynode} == true ) && ( ${shell} == true ) ) ]]; then
+  pushd ${PRJ_ROOT_DIR}
+  make shell-pynode-image
+  popd
+fi
+
+if [[ ( ( ${pulumi} == true ) && ( ${build} == true ) ) ]]; then
+  echo "Building pulumi"
+  pushd ${PRJ_ROOT_DIR}
+  make SKIPFLASKBUILD=${skip_rebuild_flask} SKIPNODEBUILD=${skip_rebuild_node} build-pulumi-image
+  popd
+  echo "pulumi build complete"
+elif [[ ( ( ${pulumi} == true ) && ( ${shell} == true ) ) ]]; then
+  pushd ${PRJ_ROOT_DIR}
+  make shell-pulumi-image
+  popd
+fi
+
+if [[ ( ( ${awsmgr} == true ) && ( ${build} == true ) ) ]]; then
+  echo "Building awsmgr"
+  pushd ${PRJ_ROOT_DIR}
+  make SKIPFLASKBUILD=${skip_rebuild_flask} SKIPNODEBUILD=${skip_rebuild_node} build-awsmgr-image
+  echo "awsmgr build complete"
+  popd
+elif [[ ( ( ${awsmgr} == true ) && ( ${shell} == true ) ) ]]; then
+  pushd ${PRJ_ROOT_DIR}
+  make shell-awsmgr-image
+  popd
+fi
+
+if [[ ( ( ${vice} == true ) && ( ${build} == true ) ) ]]; then
+  echo "Building vice"
+  pushd ${PRJ_ROOT_DIR}
+  make SKIPFLASKBUILD=${skip_rebuild_flask} SKIPNODEBUILD=${skip_rebuild_node} build-vice-image
+  echo "vice build complete"
+  popd
+elif [[ ( ( ${vice} == true ) && ( ${shell} == true ) ) ]]; then
+  pushd ${PRJ_ROOT_DIR}
+  make shell-vice-image
+  popd
+fi
