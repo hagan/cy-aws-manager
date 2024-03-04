@@ -282,7 +282,7 @@ Default output format [None]: json
 
 10. Generate temporary session token (token will expire in 1 hours / 3600 seconds)
 
-    `$> aws --profile ua-data7-awsmgr sts assume-role --role-arn "arn:aws:iam::1234557890:role/AWSManagerRole --role-session-name "AwsManagerRoleSession" --duration-seconds 3600`
+    `$> aws --profile ua-data7-awsmgr sts assume-role --role-arn "arn:aws:iam::1234557890:role/AWSManagerRole" --role-session-name "AwsManagerRoleSession" --duration-seconds 3600`
 
     Other options (2FA/MFA)
     --serial-number arn:aws:iam::1234557890:mfa/MFA_DEVICE_NAME

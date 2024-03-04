@@ -1,10 +1,24 @@
 #!/usr/bin/env bash
 
 ## this runs the last make build you ran in project
-
 if [ -z ${PRJ_ROOT_DIR} ]; then
   echo >&2 "ERROR: Cannot run, missing PRJ_ROOT_DIR environment variables"
   exit 1
+fi
+
+if [[ -z $MK_AWS_PROFILE ]]; then
+  echo >&2 "ERROR: Must set MK_AWS_PROFILE!"
+  exit 1
+fi
+
+mkstatefile='/tmp/mk-state'
+
+declare _MK_LAST_CMD
+
+if [ -f "${mkstatefile}" ]; then
+  read -r _MK_LAST_CMD <"${mkstatefile}"
+else
+  _MK_LAST_CMD=""
 fi
 
 # Initialize flags
@@ -12,29 +26,78 @@ pynode=false
 pulumi=false
 awsmgr=false
 vice=false
-skip_rebuild_flask='yes'
-skip_rebuild_node='yes'
+clean=false
+rebuild_flask=false
+rebuild_node=false
 
 build=true
 shell=false
+save_args=$@
 
-command="$1"
-shift
+if [[ $1 != -* ]]; then
+  command="$1"
+  shift
+else
+  command=''
+fi
 
 parse_long_options() {
-    for arg in "$@"; do
-        case $arg in
-            --rebuild-flask)
-                skip_rebuild_flask='no'
-                ;;
-            --rebuild-node)
-                skip_rebuild_node='no'
-                ;;
-            *)
-                # Ignore unknown options
-                ;;
-        esac
-    done
+  for arg in "$@"; do
+    case $arg in
+      --rebuild-flask)
+        rebuild_flask = true
+        ;;
+      --rebuild-node)
+        rebuild_node = true
+        ;;
+      *)
+        # Ignore unknown options
+        ;;
+    esac
+  done
+}
+
+get_aws_account_id() {
+  aws_account_id=$(\
+      aws --profile ${MK_AWS_PROFILE} \
+      sts get-caller-identity \
+        | jq -r .Account \
+      || { \
+        >&2 echo "ERROR: failed to get AWS Account ID."; \
+        exit 1; \
+      } \
+    )
+}
+
+generate_aws_token() {
+  aws_account_id=$(\
+      aws --profile ${MK_AWS_PROFILE} \
+      sts get-caller-identity \
+        | jq -r .Account \
+      || { \
+        >&2 echo "ERROR: failed to get AWS Account ID."; \
+        exit 1; \
+      } \
+    )
+    echo "AWS Account ID: ${aws_account_id}"
+    if [[ ! -z ${aws_account_id} ]]; then
+      aws_output=$(\
+        aws --profile ${MK_AWS_PROFILE} sts assume-role \
+        --role-arn "arn:aws:iam::${aws_account_id}:role/AWSManagerRole" \
+        --role-session-name "AwsManagerRoleSession" \
+        --duration-seconds 3600\
+      )
+      AWS_ACCESS_KEY_ID=$(echo ${aws_output} | jq -r '.Credentials.AccessKeyId')
+      AWS_SECRET_ACCESS_KEY=$(echo ${aws_output} | jq -r '.Credentials.SecretAccessKey')
+      AWS_SESSION_TOKEN=$(echo ${aws_output} | jq -r '.Credentials.SessionToken')
+      AWS_SESSION_TOKEN_EXPIRATION=$(echo ${aws_output} | jq -r '.Credentials.Expiration')
+      if [[ -f ${PRJ_ROOT_DIR}/.env ]]; then
+        sed -i "s|^AWS_ACCESS_KEY_ID=.*|AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'|" ${PRJ_ROOT_DIR}/.env
+        sed -i "s|^AWS_SECRET_ACCESS_KEY=.*|AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'|" ${PRJ_ROOT_DIR}/.env
+        sed -i "s|^AWS_SESSION_TOKEN=.*|AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'|" ${PRJ_ROOT_DIR}/.env
+        sed -i "s|^AWS_SESSION_TOKEN_EXPIRATION=.*|AWS_SESSION_TOKEN_EXPIRATION='${AWS_SESSION_TOKEN_EXPIRE}'|" ${PRJ_ROOT_DIR}/.env
+      fi
+    fi
 }
 
 # First, handle long options
@@ -44,10 +107,10 @@ parse_long_options "$@"
 while getopts "fns" opt; do
     case ${opt} in
         f)
-            skip_rebuild_flask='no'
+            rebuild_flask=true
             ;;
         n)
-            skip_rebuild_node='no'
+            rebuild_node=true
             ;;
         s)
             if [[ $command == 'all' ]]; then
@@ -64,57 +127,99 @@ while getopts "fns" opt; do
     esac
 done
 
+echo "'$command'"
 
 # Loop through arguments and process them
 case $command in
-    pynode)
-        pynode=true
-        pulumi=false
-        awsmgr=false
-        vice=false
-        ;;
-    pulumi)
-        pynode=false
-        pulumi=true
-        awsmgr=false
-        vice=false
-        ;;
-    awsmgr)
-        pynode=false
-        pulumi=false
-        awsmgr=true
-        vice=false
-        ;;
-    vice)
-        pynode=false
-        pulumi=false
-        awsmgr=false
-        vice=true
-        ;;
-    all)
-        pynode=true
-        pulumi=true
-        awsmgr=true
-        vice=true
-        ;;
-    *)
-        # Ignore unknown options / handle error
-        exit 1
-        ;;
+  pynode)
+    pynode=true
+    pulumi=false
+    awsmgr=false
+    vice=false
+    ;;
+  pulumi)
+    pynode=false
+    pulumi=true
+    awsmgr=false
+    vice=false
+    ;;
+  awsmgr)
+    pynode=false
+    pulumi=false
+    awsmgr=true
+    vice=false
+    ;;
+  vice)
+    pynode=false
+    pulumi=false
+    awsmgr=false
+    vice=true
+    ;;
+  clean)
+    clean=true
+    ;;
+  all)
+    pynode=true
+    pulumi=true
+    awsmgr=true
+    vice=true
+    ;;
+  generate-aws-token)
+    generate_aws_token
+    ;;
+  last)
+    if [[ -z ${_MK_LAST_CMD} ]]; then
+      echo "No last action!"
+    else
+      # echo "RUNNING $0 ${_MK_LAST_CMD}"
+      $0 ${_MK_LAST_CMD}
+    fi
+    ;;
+  '')
+    echo "..."
+    ;;
+  *)
+    # Ignore unknown options / handle error
+    exit 1
+    ;;
 esac
 
+echo "rebuild_flask = $rebuild_flask"
+echo "rebuild_node = $rebuild_node"
+echo "build = $build"
+echo "shell = $shell"
+echo "pynode = $pynode"
+echo "pulumi = $pulumi"
+echo "awsmgr = $awsmgr"
+echo "vice = $vice"
 
-# echo "skip_rebuild_flask = $skip_rebuild_flask"
-# echo "skip_rebuild_node = $skip_rebuild_node"
-# echo "pynode = $pynode"
-# echo "pulumi = $pulumi"
-# echo "awsmgr = $awsmgr"
-# echo "vice = $vice"
+if [[ ${clean} == true ]]; then
+  echo "Cleaning things up"
+  pushd ${PRJ_ROOT_DIR}
+  make clean
+  popd
+fi
+
+if [[ ( ( ${rebuild_flask} == true ) && ( ${build} == true ) ) ]]; then
+  echo "Building flask module"
+  pushd ${PRJ_ROOT_DIR}
+  make build-flask-app
+  popd
+  echo "Building flask module complete"
+fi
+
+if [[ ( ( ${rebuild_node} == true ) && ( ${build} == true ) ) ]]; then
+  echo "Building yarn module"
+  pushd ${PRJ_ROOT_DIR}
+  make build-node-app
+  popd
+  echo "Building yarn module complete"
+fi
 
 if [[ ( ( ${pynode} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building pynode"
   pushd ${PRJ_ROOT_DIR}
-  make SKIPFLASKBUILD=${skip_rebuild_flask} SKIPNODEBUILD=${skip_rebuild_node} build-pynode-image
+  make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' build-pynode-image
   popd
   echo "pulumi pynode complete"
 elif [[ ( ( ${pynode} == true ) && ( ${shell} == true ) ) ]]; then
@@ -126,7 +231,7 @@ fi
 if [[ ( ( ${pulumi} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building pulumi"
   pushd ${PRJ_ROOT_DIR}
-  make SKIPFLASKBUILD=${skip_rebuild_flask} SKIPNODEBUILD=${skip_rebuild_node} build-pulumi-image
+  make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' build-pulumi-image
   popd
   echo "pulumi build complete"
 elif [[ ( ( ${pulumi} == true ) && ( ${shell} == true ) ) ]]; then
@@ -138,7 +243,7 @@ fi
 if [[ ( ( ${awsmgr} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building awsmgr"
   pushd ${PRJ_ROOT_DIR}
-  make SKIPFLASKBUILD=${skip_rebuild_flask} SKIPNODEBUILD=${skip_rebuild_node} build-awsmgr-image
+  make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' build-awsmgr-image
   echo "awsmgr build complete"
   popd
 elif [[ ( ( ${awsmgr} == true ) && ( ${shell} == true ) ) ]]; then
@@ -150,11 +255,15 @@ fi
 if [[ ( ( ${vice} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building vice"
   pushd ${PRJ_ROOT_DIR}
-  make SKIPFLASKBUILD=${skip_rebuild_flask} SKIPNODEBUILD=${skip_rebuild_node} build-vice-image
+  make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' build-vice-image
   echo "vice build complete"
   popd
 elif [[ ( ( ${vice} == true ) && ( ${shell} == true ) ) ]]; then
   pushd ${PRJ_ROOT_DIR}
   make shell-vice-image
   popd
+fi
+
+if [[ $command != 'last' ]]; then
+  printf "%s\n" "${save_args}" >"${mkstatefile}"
 fi
