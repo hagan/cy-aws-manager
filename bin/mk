@@ -21,6 +21,8 @@ else
   _MK_LAST_CMD=""
 fi
 
+local_registry='no'
+
 # Initialize flags
 pynode=false
 pulumi=false
@@ -49,6 +51,9 @@ parse_long_options() {
         ;;
       --rebuild-node)
         rebuild_node = true
+        ;;
+      --local-registry)
+        local_registry = 'yes'
         ;;
       *)
         # Ignore unknown options
@@ -104,7 +109,7 @@ generate_aws_token() {
 parse_long_options "$@"
 
 # Now, handle short options
-while getopts "fns" opt; do
+while getopts "fnsl" opt; do
     case ${opt} in
         f)
             rebuild_flask=true
@@ -119,6 +124,9 @@ while getopts "fns" opt; do
             fi
             build=false
             shell=true
+            ;;
+        l)
+            local_registry='yes'
             ;;
         *)
             # Handle error: unknown option
@@ -188,6 +196,7 @@ echo "rebuild_flask = $rebuild_flask"
 echo "rebuild_node = $rebuild_node"
 echo "build = $build"
 echo "shell = $shell"
+echo "local_registry = ${local_registry}"
 echo "pynode = $pynode"
 echo "pulumi = $pulumi"
 echo "awsmgr = $awsmgr"
@@ -255,12 +264,14 @@ fi
 if [[ ( ( ${vice} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building vice"
   pushd ${PRJ_ROOT_DIR}
-  make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' build-vice-image
+  echo "make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY=\"${local_registry}\" build-vice-image"
+  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" build-vice-image
   echo "vice build complete"
   popd
 elif [[ ( ( ${vice} == true ) && ( ${shell} == true ) ) ]]; then
+  echo "Shelling into vice"
   pushd ${PRJ_ROOT_DIR}
-  make shell-vice-image
+  make LOCALREGISTRY="${local_registry}" shell-vice-image
   popd
 fi
 

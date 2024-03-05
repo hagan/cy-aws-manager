@@ -69,6 +69,14 @@ else
 LOADFLAG :=
 endif
 
+
+
+ifeq ($(LOCALREGISTRY),yes)
+REGISTRY := localhost:5000
+else
+REGISTRY := $(DOCKERHUB_USER)
+endif
+
 ifeq ($(SKIPNODEBUILD),yes)
 NODEBUILD :=
 else
@@ -283,7 +291,12 @@ shell-awsmgr-image:
 	docker run --rm -it hagan/awsmgr:latest /bin/sh
 ## vice
 # build vice
-build-vice-image: all $(FLASKBUILD) $(NODEBUILD)
+compress-vice-package:
+	@echo "Compressing $(VICE_DKR_DIR)/package -> $(VICE_DKR_DIR)/package.tar.gz"
+	@test -f "$(VICE_DKR_DIR)/package.tar.gz" && rm $(VICE_DKR_DIR)/package.tar.gz && echo "removed $(VICE_DKR_DIR)/package.tar.gz"
+	@tar cvfz $(VICE_DKR_DIR)/package.tar.gz --owner=root --group=root -C $(VICE_DKR_DIR)/package .
+
+build-vice-image: all compress-vice-package $(FLASKBUILD) $(NODEBUILD)
 	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
 	@echo "$(date +%T) - Building viceawsmg $(VICE_DKR_VERSION) image from $(VICE_DKR_DIR)/Dockerfile!"
 	@echo "FLAGS: $(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) $(PUSHFLAG)"
@@ -301,9 +314,9 @@ build-vice-image: all $(FLASKBUILD) $(NODEBUILD)
 		--build-arg VICE_DKR_DIR=$(VICE_DKR_DIR) \
 		--build-arg CACHEBUST=$(shell date +%s) \
 		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
-		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) \
-		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION)-$(GIT_HASH) \
-		--tag $(DOCKERHUB_USER)/viceawsmgr:latest \
+		--tag $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION) \
+		--tag $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION)-$(GIT_HASH) \
+		--tag $(REGISTRY)/viceawsmgr:latest \
 		$(PUSHFLAG) .
 # vice - clean image
 clean-vice-image:
@@ -325,7 +338,7 @@ harbor-push-vice-image:
 	docker push harbor.cyverse.org/vice/appstream:latest
 
 shell-vice-image-sim:
-	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) 'sim' -- RUNSHELL=$(RUNSHELL)"
+	@echo "Running viceawsmgr $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION) 'sim' -- RUNSHELL=$(RUNSHELL)"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 		&& docker exec \
@@ -336,10 +349,10 @@ shell-vice-image-sim:
 			--quiet \
 			--name vice \
 			-p 80:80 \
-			--rm -it $(DOCKERHUB_USER)/viceawsmgr:latest /bin/sh
+			--rm -it $(REGISTRY)/viceawsmgr:latest /bin/sh
 
 shell-vice-image:
-	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) -- RUNSHELL=$(RUNSHELL)"
+	@echo "Running viceawsmgr $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION) -- RUNSHELL=$(RUNSHELL)"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 		&& docker exec \
@@ -354,18 +367,18 @@ shell-vice-image:
 			-p 2022:22 \
 			--volume $(CURDIR)/src/ui/dist:/mnt/dist/npms \
 			--volume $(CURDIR)/src/flask/dist:/mnt/dist/wheels \
-			--rm -it $(DOCKERHUB_USER)/viceawsmgr:latest /bin/sh
+			--rm -it $(REGISTRY)/viceawsmgr:latest /bin/sh
 
 history-vice-image:
-	@echo "docker history $(DOCKERHUB_USER)/viceawsmgr:latest"
-	@docker history $(DOCKERHUB_USER)/viceawsmgr:latest
+	@echo "docker history $(REGISTRY)/viceawsmgr:latest"
+	@docker history $(REGISTRY)/viceawsmgr:latest
 
 #
 # 		/usr/bin/bash
 # 	    'su - gunicorn -c ". /home/gunicorn/envs/flask-env/bin/activate && export FLASK_APP='awsmgr.app' && exec /usr/bin/bash"'
 
 shell-gunicorn-vice-image:
-	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) as gunicorn user"
+	@echo "Running viceawsmgr $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION) as gunicorn user"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	  && docker exec \
@@ -380,7 +393,7 @@ shell-gunicorn-vice-image:
 	  || { echo "ERROR: vice image not running!"; exit 1; }
 
 shell-cyverse-vice-image:
-	@echo "Running viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) as cyverse user"
+	@echo "Running viceawsmgr $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION) as cyverse user"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	  && docker exec \
