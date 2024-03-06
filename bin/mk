@@ -85,22 +85,24 @@ generate_aws_token() {
       } \
     )
     echo "AWS Account ID: ${aws_account_id}"
+    # min 900 seconds or 8 hours max?
     if [[ ! -z ${aws_account_id} ]]; then
       aws_output=$(\
         aws --profile ${MK_AWS_PROFILE} sts assume-role \
         --role-arn "arn:aws:iam::${aws_account_id}:role/AWSManagerRole" \
         --role-session-name "AwsManagerRoleSession" \
-        --duration-seconds 3600\
+        --duration-seconds 900\
       )
       AWS_ACCESS_KEY_ID=$(echo ${aws_output} | jq -r '.Credentials.AccessKeyId')
       AWS_SECRET_ACCESS_KEY=$(echo ${aws_output} | jq -r '.Credentials.SecretAccessKey')
       AWS_SESSION_TOKEN=$(echo ${aws_output} | jq -r '.Credentials.SessionToken')
       AWS_SESSION_TOKEN_EXPIRATION=$(echo ${aws_output} | jq -r '.Credentials.Expiration')
+      echo "AWS_SESSION_TOKEN_EXPIRATION=$AWS_SESSION_TOKEN_EXPIRATION"
       if [[ -f ${PRJ_ROOT_DIR}/.env ]]; then
         sed -i "s|^AWS_ACCESS_KEY_ID=.*|AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'|" ${PRJ_ROOT_DIR}/.env
         sed -i "s|^AWS_SECRET_ACCESS_KEY=.*|AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'|" ${PRJ_ROOT_DIR}/.env
         sed -i "s|^AWS_SESSION_TOKEN=.*|AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'|" ${PRJ_ROOT_DIR}/.env
-        sed -i "s|^AWS_SESSION_TOKEN_EXPIRATION=.*|AWS_SESSION_TOKEN_EXPIRATION='${AWS_SESSION_TOKEN_EXPIRE}'|" ${PRJ_ROOT_DIR}/.env
+        sed -i "s|^AWS_SESSION_TOKEN_EXPIRATION=.*|AWS_SESSION_TOKEN_EXPIRATION='${AWS_SESSION_TOKEN_EXPIRATION}'|" ${PRJ_ROOT_DIR}/.env
       fi
     fi
 }
@@ -134,8 +136,6 @@ while getopts "fnsl" opt; do
             ;;
     esac
 done
-
-echo "'$command'"
 
 # Loop through arguments and process them
 case $command in
@@ -228,36 +228,39 @@ fi
 if [[ ( ( ${pynode} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building pynode"
   pushd ${PRJ_ROOT_DIR}
-  make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' build-pynode-image
+  echo "make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY=\"${local_registry}\" build-pynode-image"
+  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" build-pynode-image
   popd
   echo "pulumi pynode complete"
 elif [[ ( ( ${pynode} == true ) && ( ${shell} == true ) ) ]]; then
   pushd ${PRJ_ROOT_DIR}
-  make shell-pynode-image
+  make LOCALREGISTRY="${local_registry}" shell-pynode-image
   popd
 fi
 
 if [[ ( ( ${pulumi} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building pulumi"
   pushd ${PRJ_ROOT_DIR}
-  make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' build-pulumi-image
+  echo "make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY=\"${local_registry}\" build-pulumi-image"
+  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" build-pulumi-image
   popd
   echo "pulumi build complete"
 elif [[ ( ( ${pulumi} == true ) && ( ${shell} == true ) ) ]]; then
   pushd ${PRJ_ROOT_DIR}
-  make shell-pulumi-image
+  make LOCALREGISTRY="${local_registry}" shell-pulumi-image
   popd
 fi
 
 if [[ ( ( ${awsmgr} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building awsmgr"
   pushd ${PRJ_ROOT_DIR}
-  make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' build-awsmgr-image
+  echo "make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes'  LOCALREGISTRY=\"${local_registry}\" build-awsmgr-image"
+  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" build-awsmgr-image
   echo "awsmgr build complete"
   popd
 elif [[ ( ( ${awsmgr} == true ) && ( ${shell} == true ) ) ]]; then
   pushd ${PRJ_ROOT_DIR}
-  make shell-awsmgr-image
+  make LOCALREGISTRY="${local_registry}" shell-awsmgr-image
   popd
 fi
 

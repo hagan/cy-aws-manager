@@ -332,7 +332,7 @@ docker-push-vice-image:
 	docker push $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION); \
 	docker push $(DOCKERHUB_USER)/viceawsmgr:latest
 
-harbor-push-vice-image:
+harbor-push-vice-image: harbor-login
 	@echo "Pushing viceawsmgr $(DOCKERHUB_USER)/viceawsmgr:latest to harbor"
 	docker tag $(DOCKERHUB_USER)/viceawsmgr:latest harbor.cyverse.org/vice/appstream:latest
 	docker push harbor.cyverse.org/vice/appstream:latest
@@ -541,4 +541,9 @@ harbor-shell-ni:
 
 
 harbor-login:
-	docker login harbor.cyverse.org
+	@docker login harbor.cyverse.org
+
+
+start-local-registry:
+	@docker start registry
+# @docker run -d -p 5000:5000 --name registry registry:2
