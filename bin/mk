@@ -43,6 +43,24 @@ else
   command=''
 fi
 
+show_help() {
+  echo """
+  -- mk help command--
+
+  mk <COMMAND> <OPTIONS>
+
+  COMMANDS
+    pynode - Build/run the pynode Docker image
+    pulumi
+    awsmgr
+    vice
+    clean
+    all
+    generate-aws-token  -- Generate temporary token for aws
+
+  """
+}
+
 parse_long_options() {
   for arg in "$@"; do
     case $arg in
@@ -139,6 +157,9 @@ done
 
 # Loop through arguments and process them
 case $command in
+  help)
+    show_help
+    ;;
   pynode)
     pynode=true
     pulumi=false
