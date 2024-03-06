@@ -293,7 +293,7 @@ shell-awsmgr-image:
 # build vice
 compress-vice-package:
 	@echo "Compressing $(VICE_DKR_DIR)/package -> $(VICE_DKR_DIR)/package.tar.gz"
-	@test -f "$(VICE_DKR_DIR)/package.tar.gz" && rm $(VICE_DKR_DIR)/package.tar.gz && echo "removed $(VICE_DKR_DIR)/package.tar.gz"
+	@test -f "$(VICE_DKR_DIR)/package.tar.gz" && { rm $(VICE_DKR_DIR)/package.tar.gz && echo "removed $(VICE_DKR_DIR)/package.tar.gz"; } || true
 	@tar cvfz $(VICE_DKR_DIR)/package.tar.gz --owner=root --group=root -C $(VICE_DKR_DIR)/package .
 
 build-vice-image: all compress-vice-package $(FLASKBUILD) $(NODEBUILD)
