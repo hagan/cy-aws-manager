@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
 
+
+cleanup() {
+  popd
+}
+
+
 ## this runs the last make build you ran in project
 if [ -z ${PRJ_ROOT_DIR} ]; then
   echo >&2 "ERROR: Cannot run, missing PRJ_ROOT_DIR environment variables"
   exit 1
+else
+  pushd  ${PRJ_ROOT_DIR}
+  trap cleanup EXIT
 fi
 
 if [[ -z $MK_AWS_PROFILE ]]; then
@@ -21,7 +30,9 @@ else
   _MK_LAST_CMD=""
 fi
 
-local_registry='no'
+local_registry='yes'
+harbor_tags='no'
+docker_tags='no'
 
 # Initialize flags
 pynode=false
@@ -43,44 +54,71 @@ else
   command=''
 fi
 
-show_help() {
+function show_help() {
   echo """
   -- mk help command--
 
-  mk <COMMAND> <OPTIONS>
+  mk <COMMAND> <FLAGS>
 
   COMMANDS
+    registry - create/start local registry
+    update - Update this repo and submodule
     pynode - Build/run the pynode Docker image
-    pulumi
-    awsmgr
-    vice
-    clean
-    all
+    pulumi - Build/run the pulumi Docker image
+    awsmgr - Build/run the awsmgr (base) Docker imge
+    vice   - Build/run the main vice Docker image
+    clean  - Be careful, this may clear all docker cache.
+    all    - Builds pynode, pulumi, awsmgr then vice in that order.
     generate-aws-token  -- Generate temporary token for aws
 
+  FLAGS
+    -f/--rebuild-flask  - Builds flask wheel package in dist for awsmgr/vice images
+    -n/--rebuild-node   - Builds NextJS tgz package in dist for awsmgr/vice images
+    -s/--shell          - load shell for pynode/pulumi/awsmgrvice ie 'mk pynode -s'
+    -h/--harbor-tags    - Push to harbor (only works on vice command)
+    -k/--docker-tags    - Push to docker
   """
 }
 
-parse_long_options() {
-  for arg in "$@"; do
-    case $arg in
-      --rebuild-flask)
-        rebuild_flask = true
-        ;;
-      --rebuild-node)
-        rebuild_node = true
-        ;;
-      --local-registry)
-        local_registry = 'yes'
-        ;;
-      *)
-        # Ignore unknown options
-        ;;
-    esac
-  done
+
+function update_project() {
+  if git status --porcelain | grep -q '^[[:space:]]*[AMD]'; then
+    echo "ERROR: Can't update project, you have uncommitted changes."
+    git status
+    exit 1
+  else
+      echo "git pull"
+      git pull && {
+        echo "git submodule update --recursive --remote"
+        git submodule update --recursive --remote && {
+          echo "Updated submodules, check to make sure they're on main branch and pull"
+          exit 0
+        } || {
+          >&2 echo "ERROR: failed to update submodules"
+          exit 1
+        }
+      } || {
+        >&2 echo "ERROR: failed to pull!"
+        exit 1
+      }
+
+  fi
+  popd >/dev/null
+  exit 0
 }
 
-get_aws_account_id() {
+function load_registry() {
+  if docker ps -a --format json | jq -r '.Names' | grep -q 'registry' \
+    && docker ps -a --format json | jq -r '.State' | grep -q 'running'; then
+    exit 0
+  elif docker ps -a --format json | jq -r '.Names' | grep -q 'registry'; then
+    docker restart registry
+  else
+    docker run -d -p 5000:5000 --name registry registry:2
+  fi
+}
+
+function get_aws_account_id() {
   aws_account_id=$(\
       aws --profile ${MK_AWS_PROFILE} \
       sts get-caller-identity \
@@ -92,7 +130,7 @@ get_aws_account_id() {
     )
 }
 
-generate_aws_token() {
+function generate_aws_token() {
   aws_account_id=$(\
       aws --profile ${MK_AWS_PROFILE} \
       sts get-caller-identity \
@@ -125,11 +163,51 @@ generate_aws_token() {
     fi
 }
 
+function parse_long_options() {
+  for arg in "$@"; do
+    case $arg in
+      --rebuild-flask)
+        rebuild_flask = true
+        ;;
+      --rebuild-node)
+        rebuild_node = true
+        ;;
+      --shell)
+        valid_commands=("pynode" "pulumi" "awsmgr" "vice")
+        found=0
+        for cmd in "${valid_commands[@]}"; do
+          if [[ "$cmd" == "$command" ]]; then
+            found=1
+            break
+          fi
+        done
+        if [[ $found -ne 1 ]]; then
+            echo >&2 "ERROR: cannot run shell with $command"
+            exit 1
+          fi
+          build=false
+          shell=true
+        ;;
+      --harbor-tags)
+        harbor_tags='yes'
+        local_registry='no'
+        ;;
+      --docker-tags)
+        docker_tags='yes'
+        local_registry='no'
+        ;;
+      *)
+        # Ignore unknown options
+        ;;
+    esac
+  done
+}
+
 # First, handle long options
 parse_long_options "$@"
 
 # Now, handle short options
-while getopts "fnsl" opt; do
+while getopts "fnshk" opt; do
     case ${opt} in
         f)
             rebuild_flask=true
@@ -138,16 +216,23 @@ while getopts "fnsl" opt; do
             rebuild_node=true
             ;;
         s)
-            if [[ $command == 'all' ]]; then
-              echo >&2 "ERROR: cannot use 'all' with +s"
-              exit 1
-            fi
-            build=false
-            shell=true
-            ;;
-        l)
-            local_registry='yes'
-            ;;
+          if [[ $command == 'all' ]]; then
+            echo >&2 "ERROR: cannot use 'all' with +s"
+            exit 1
+          fi
+          build=false
+          shell=true
+          ;;
+        h)
+          # Harbor push
+          harbor_tags='yes'
+          local_registry='no'
+          ;;
+        k)
+          ## Docker push
+          docker_tags='yes'
+          local_registry='no'
+          ;;
         *)
             # Handle error: unknown option
             exit 1
@@ -159,6 +244,12 @@ done
 case $command in
   help)
     show_help
+    ;;
+  registry)
+    load_registry
+    ;;
+  update)
+    update_project
     ;;
   pynode)
     pynode=true
@@ -213,90 +304,70 @@ case $command in
     ;;
 esac
 
-echo "rebuild_flask = $rebuild_flask"
-echo "rebuild_node = $rebuild_node"
-echo "build = $build"
-echo "shell = $shell"
-echo "local_registry = ${local_registry}"
-echo "pynode = $pynode"
-echo "pulumi = $pulumi"
-echo "awsmgr = $awsmgr"
-echo "vice = $vice"
+# echo "rebuild_flask = $rebuild_flask"
+# echo "rebuild_node = $rebuild_node"
+# echo "build = $build"
+# echo "shell = $shell"
+# echo "local_registry = ${local_registry}"
+# echo "harbor_tags = ${harbor_tags}"
+# echo "docker_tags = ${docker_tags}"
+# echo "pynode = $pynode"
+# echo "pulumi = $pulumi"
+# echo "awsmgr = $awsmgr"
+# echo "vice = $vice"
 
 if [[ ${clean} == true ]]; then
   echo "Cleaning things up"
-  pushd ${PRJ_ROOT_DIR}
   make clean
-  popd
 fi
 
 if [[ ( ( ${rebuild_flask} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building flask module"
-  pushd ${PRJ_ROOT_DIR}
   make build-flask-app
-  popd
   echo "Building flask module complete"
 fi
 
 if [[ ( ( ${rebuild_node} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building yarn module"
-  pushd ${PRJ_ROOT_DIR}
   make build-node-app
-  popd
   echo "Building yarn module complete"
 fi
 
 if [[ ( ( ${pynode} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building pynode"
-  pushd ${PRJ_ROOT_DIR}
   echo "make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY=\"${local_registry}\" build-pynode-image"
-  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" build-pynode-image
-  popd
+  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" DOCKERREGISTRY="${docker_tags}" build-pynode-image
   echo "pulumi pynode complete"
 elif [[ ( ( ${pynode} == true ) && ( ${shell} == true ) ) ]]; then
-  pushd ${PRJ_ROOT_DIR}
-  make LOCALREGISTRY="${local_registry}" shell-pynode-image
-  popd
+  make shell-pynode-image
 fi
 
 if [[ ( ( ${pulumi} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building pulumi"
-  pushd ${PRJ_ROOT_DIR}
   echo "make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY=\"${local_registry}\" build-pulumi-image"
-  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" build-pulumi-image
-  popd
+  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" DOCKERREGISTRY="${docker_tags}" build-pulumi-image
   echo "pulumi build complete"
 elif [[ ( ( ${pulumi} == true ) && ( ${shell} == true ) ) ]]; then
-  pushd ${PRJ_ROOT_DIR}
-  make LOCALREGISTRY="${local_registry}" shell-pulumi-image
-  popd
+  make shell-pulumi-image
 fi
 
 if [[ ( ( ${awsmgr} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building awsmgr"
-  pushd ${PRJ_ROOT_DIR}
   echo "make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes'  LOCALREGISTRY=\"${local_registry}\" build-awsmgr-image"
-  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" build-awsmgr-image
+  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" DOCKERREGISTRY="${docker_tags}" build-awsmgr-image
   echo "awsmgr build complete"
-  popd
 elif [[ ( ( ${awsmgr} == true ) && ( ${shell} == true ) ) ]]; then
-  pushd ${PRJ_ROOT_DIR}
-  make LOCALREGISTRY="${local_registry}" shell-awsmgr-image
-  popd
+  make  shell-awsmgr-image
 fi
 
 if [[ ( ( ${vice} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building vice"
-  pushd ${PRJ_ROOT_DIR}
   echo "make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY=\"${local_registry}\" build-vice-image"
-  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" build-vice-image
+  time make SKIPFLASKBUILD='yes' SKIPNODEBUILD='yes' LOCALREGISTRY="${local_registry}" DOCKERREGISTRY="${docker_tags}" HARBORREGISTRY="${harbor_tags}" build-vice-image
   echo "vice build complete"
-  popd
 elif [[ ( ( ${vice} == true ) && ( ${shell} == true ) ) ]]; then
   echo "Shelling into vice"
-  pushd ${PRJ_ROOT_DIR}
-  make LOCALREGISTRY="${local_registry}" shell-vice-image
-  popd
+  make shell-vice-image
 fi
 
 if [[ $command != 'last' ]]; then

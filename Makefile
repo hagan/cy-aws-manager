@@ -48,11 +48,11 @@ else
 CACHEFLAG :=
 endif
 
-ifeq ($(SKIPDOCKERHUB),yes)
-PUSHFLAG :=
-else
-PUSHFLAG := --push
-endif
+# ifeq ($(SKIPDOCKERHUB),yes)
+# PUSHFLAG :=
+# else
+# PUSHFLAG := --push
+# endif
 
 ifeq ($(NOPULL),yes)
 PULLFLAG := --pull=false
@@ -60,21 +60,66 @@ else
 PULLFLAG :=
 endif
 
-ifeq ($(LOADLOCAL),yes)
-LOADFLAG := --load
-@echo "cannot use push flag with LOADLOCAL=yes"
+# ifeq ($(LOADLOCAL),yes)
+# LOADFLAG := --load
+# @echo "cannot use push flag with LOADLOCAL=yes"
+# PUSHFLAG :=
+# PLATFORMS := $(LOCAL_PLATFORM)
+# else
+# LOADFLAG :=
+# endif
+
 PUSHFLAG :=
-PLATFORMS := $(LOCAL_PLATFORM)
-else
-LOADFLAG :=
+PYNODETAGS :=
+PULUMITAGS :=
+AWSMGRTAGS :=
+VICEAWSMGRTAGS :=
+REGISTRY := localhost:5000/
+
+## Currently Harbor is only letting me post to "appstream"
+ifeq ($(HARBORREGISTRY),yes)
+# PYNODETAGS (none)
+# PULUMITAGS (none)
+# AWSMGRTAGS (none)
+	PUSHFLAG := --push
+	VICEAWSMGRTAGS := $(VICEAWSMGRTAGS) \
+		--tag harbor.cyverse.org/vice/appstream:latest
+
+	REGISTRY := harbor.cyverse.org/
+endif
+
+ifeq ($(DOCKERREGISTRY),yes)
+	PUSHFLAG := --push
+	PYNODETAGS :=  $(PYNODETAGS) \
+		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)-$(GIT_HASH) \
+		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION) \
+		--tag $(DOCKERHUB_USER)/pynode:latest
+	PULUMITAGS := $(PULUMITAGS) \
+		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)-$(GIT_HASH) \
+		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION) \
+		--tag $(DOCKERHUB_USER)/pulumi:latest
+	AWSMGRTAGS := $(AWSMGRTAGS) \
+		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-$(GIT_HASH) \
+		--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) \
+		--tag $(DOCKERHUB_USER)/awsmgr:latest
+	VICEAWSMGRTAGS := $(VICEAWSMGRTAGS) \
+		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION) \
+		--tag $(DOCKERHUB_USER)/viceawsmgr:$(VICE_DKR_VERSION)-$(GIT_HASH) \
+		--tag $(DOCKERHUB_USER)/viceawsmgr:latest
+	REGISTRY := $(DOCKERHUB_USER)/
 endif
 
 
-
 ifeq ($(LOCALREGISTRY),yes)
-REGISTRY := localhost:5000
-else
-REGISTRY := $(DOCKERHUB_USER)
+	PUSHFLAG := --push
+	PYNODETAGS :=  $(PYNODETAGS) \
+		--tag localhost:5000/pynode:latest
+	PULUMITAGS := $(PULUMITAGS) \
+		--tag localhost:5000/pulumi:latest
+	AWSMGRTAGS := $(AWSMGRTAGS) \
+		--tag localhost:5000/awsmgr:latest
+	VICEAWSMGRTAGS := $(VICEAWSMGRTAGS) \
+		--tag localhost:5000/viceawsmgr:latest
 endif
 
 ifeq ($(SKIPNODEBUILD),yes)
@@ -154,10 +199,7 @@ build-pynode-image:
 		--build-arg PYNODE_NAME=$(DOCKERHUB_USER)/pynode \
 		--build-arg PYNODE_TAG=$(PYNODE_DKR_VERSION)-$(GIT_HASH) \
 		--build-arg CACHEBUST=$(shell date +%s) \
-		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
-		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)-$(GIT_HASH) \
-		--tag $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION) \
-    	--tag $(DOCKERHUB_USER)/pynode:latest \
+		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) $(PYNODETAGS) \
 		$(PUSHFLAG) .
 # Tag pynode
 tag-pynode-image:
@@ -182,7 +224,7 @@ push-pynode-image:
 shell-pynode-image:
 	@echo "Running pynode $(DOCKERHUB_USER)/pynode:$(PYNODE_DKR_VERSION)"
 	cd $(PYNODE_DKR_DIR); \
-	docker run --rm -it hagan/pynode:latest /bin/sh
+	docker run --rm -it $(REGISTRY)pynode:latest /bin/sh
 ## PULUMI
 # Build pulumi
 build-pulumi-image:
@@ -198,16 +240,8 @@ build-pulumi-image:
 		--build-arg PULUMI_NAME=$(DOCKERHUB_USER)/pulumi \
 		--build-arg PULUMI_TAG=$(PULUMI_DKR_VERSION)-$(GIT_HASH) \
 		--build-arg CACHEBUST=$(shell date +%s) \
-		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
-		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)-$(GIT_HASH) \
-		--tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION) \
-		--tag $(DOCKERHUB_USER)/pulumi:latest \
+		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) $(PULUMITAGS) \
 		$(PUSHFLAG) .
-# Tag pulumi
-tag-pulumi-image:
-	@echo "Tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION) as latest"
-	docker tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/pulumi:latest
-	docker tag $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)
 # Clean pulumi
 clean-pulumi-image:
 	@echo "Cleaning images out for pulumi"
@@ -224,9 +258,9 @@ push-pulumi-image:
 	docker push $(DOCKERHUB_USER)/pulumi:latest
 # shell pulumi
 shell-pulumi-image:
-	@echo "Running pulumi $(DOCKERHUB_USER)/pulumi:$(PULUMI_DKR_VERSION)"
+	@echo "Running pulumi $(REGISTRY)pulumi:$(PULUMI_DKR_VERSION)"
 	cd $(PULUMI_DKR_DIR); \
-	docker run --rm -it hagan/pulumi:latest /bin/sh
+	docker run --rm -it $(REGISTRY)pulumi:latest /bin/sh
 ## AWSMGR
 # build awsmgr
 build-awsmgr-image: all $(NODEBUILD)
@@ -261,16 +295,8 @@ build-awsmgr-image: all $(NODEBUILD)
 			--build-arg AWSMGR_NAME=$(DOCKERHUB_USER)/awsmgr \
 			--build-arg AWSMGR_TAG=$(AWSMGR_DKR_VERSION)-$(GIT_HASH) \
 			--build-arg CACHEBUST=$(shell date +%s) \
-			$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
-			--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-$(GIT_HASH) \
-			--tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) \
-			--tag $(DOCKERHUB_USER)/awsmgr:latest \
+			$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) $(AWSMGRTAGS) \
 			$(PUSHFLAG) .
-# Tag awsmgr
-tag-awsmgr-image:
-	@echo "Tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION) as latest"
-	docker tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/awsmgr:latest
-	docker tag $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)-$(GIT_HASH) $(DOCKERHUB_USER)/awsmgr:$(AWSMGR_DKR_VERSION)
 # clean awsmgr
 clean-awsmgr-image:
 	@echo "Cleaning images out for awsmgr"
@@ -286,9 +312,9 @@ push-awsmgr-image:
 	docker push $(DOCKERHUB_USER)/awsmgr:latest
 # shell awsmgr
 shell-awsmgr-image:
-	@echo "Running awsmgr $(DOCKERHUB_USER)/awsmgr:latest"
+	@echo "Running awsmgr $(REGISTRY)awsmgr:latest"
 	cd $(AWSMGR_DKR_DIR); \
-	docker run --rm -it hagan/awsmgr:latest /bin/sh
+	docker run --rm -it $(REGISTRY)awsmgr:latest /bin/sh
 ## vice
 # build vice
 compress-vice-package:
@@ -296,13 +322,14 @@ compress-vice-package:
 	@test -f "$(VICE_DKR_DIR)/package.tar.gz" && { rm $(VICE_DKR_DIR)/package.tar.gz && echo "removed $(VICE_DKR_DIR)/package.tar.gz"; } || true
 	@tar cvfz $(VICE_DKR_DIR)/package.tar.gz --owner=root --group=root -C $(VICE_DKR_DIR)/package .
 
+
 build-vice-image: all compress-vice-package $(FLASKBUILD) $(NODEBUILD)
 	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
 	@echo "$(date +%T) - Building viceawsmg $(VICE_DKR_VERSION) image from $(VICE_DKR_DIR)/Dockerfile!"
 	@echo "FLAGS: $(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) $(PUSHFLAG)"
 	@if [ ! -f "$(NODE_TGZ_APP)" ]; then (echo "ERROR: $(NODE_TGZ_APP) not found!" && exit 1); fi
 	@docker buildx use $(BUILDX_NAME); \
-	DOCKER_BUILDKIT=1 docker buildx build \
+		DOCKER_BUILDKIT=1 docker buildx build \
 		--progress=plain \
 		-f $(VICE_DKR_DIR)/Dockerfile \
 		--label $(VICE_NAME) \
@@ -313,10 +340,7 @@ build-vice-image: all compress-vice-package $(FLASKBUILD) $(NODEBUILD)
 		--build-arg VICE_TAG=$(VICE_DKR_VERSION)-$(GIT_HASH) \
 		--build-arg VICE_DKR_DIR=$(VICE_DKR_DIR) \
 		--build-arg CACHEBUST=$(shell date +%s) \
-		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) \
-		--tag $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION) \
-		--tag $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION)-$(GIT_HASH) \
-		--tag $(REGISTRY)/viceawsmgr:latest \
+		$(CACHEFLAG) $(LOADFLAG) $(PULLFLAG) $(VICEAWSMGRTAGS) \
 		$(PUSHFLAG) .
 # vice - clean image
 clean-vice-image:
@@ -338,7 +362,7 @@ harbor-push-vice-image: harbor-login
 	docker push harbor.cyverse.org/vice/appstream:latest
 
 shell-vice-image-sim:
-	@echo "Running viceawsmgr $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION) 'sim' -- RUNSHELL=$(RUNSHELL)"
+	@echo "Running viceawsmgr $(REGISTRY)viceawsmgr:$(VICE_DKR_VERSION) 'sim' -- RUNSHELL=$(RUNSHELL)"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 		&& docker exec \
@@ -349,10 +373,10 @@ shell-vice-image-sim:
 			--quiet \
 			--name vice \
 			-p 80:80 \
-			--rm -it $(REGISTRY)/viceawsmgr:latest /bin/sh
+			--rm -it $(REGISTRY)viceawsmgr:latest /bin/sh
 
 shell-vice-image:
-	@echo "Running viceawsmgr $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION) -- RUNSHELL=$(RUNSHELL)"
+	@echo "Running viceawsmgr $(REGISTRY)viceawsmgr:$(VICE_DKR_VERSION) -- RUNSHELL=$(RUNSHELL)"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 		&& docker exec \
@@ -367,18 +391,18 @@ shell-vice-image:
 			-p 2022:22 \
 			--volume $(CURDIR)/src/ui/dist:/mnt/dist/npms \
 			--volume $(CURDIR)/src/flask/dist:/mnt/dist/wheels \
-			--rm -it $(REGISTRY)/viceawsmgr:latest /bin/sh
+			--rm -it $(REGISTRY)viceawsmgr:latest /bin/sh
 
 history-vice-image:
-	@echo "docker history $(REGISTRY)/viceawsmgr:latest"
-	@docker history $(REGISTRY)/viceawsmgr:latest
+	@echo "docker history $(REGISTRY)viceawsmgr:latest"
+	@docker history $(REGISTRY)viceawsmgr:latest
 
 #
 # 		/usr/bin/bash
 # 	    'su - gunicorn -c ". /home/gunicorn/envs/flask-env/bin/activate && export FLASK_APP='awsmgr.app' && exec /usr/bin/bash"'
 
 shell-gunicorn-vice-image:
-	@echo "Running viceawsmgr $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION) as gunicorn user"
+	@echo "Running viceawsmgr $(REGISTRY)viceawsmgr:$(VICE_DKR_VERSION) as gunicorn user"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	  && docker exec \
@@ -393,7 +417,7 @@ shell-gunicorn-vice-image:
 	  || { echo "ERROR: vice image not running!"; exit 1; }
 
 shell-cyverse-vice-image:
-	@echo "Running viceawsmgr $(REGISTRY)/viceawsmgr:$(VICE_DKR_VERSION) as cyverse user"
+	@echo "Running viceawsmgr $(REGISTRY)viceawsmgr:$(VICE_DKR_VERSION) as cyverse user"
 	cd $(VICE_DKR_DIR); \
 	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	  && docker exec \
@@ -542,8 +566,3 @@ harbor-shell-ni:
 
 harbor-login:
 	@docker login harbor.cyverse.org
-
-
-start-local-registry:
-	@docker start registry
-# @docker run -d -p 5000:5000 --name registry registry:2
