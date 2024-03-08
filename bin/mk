@@ -42,6 +42,7 @@ vice=false
 clean=false
 rebuild_flask=false
 rebuild_node=false
+inject=false
 
 build=true
 shell=false
@@ -77,6 +78,7 @@ function show_help() {
     -s/--shell          - load shell for pynode/pulumi/awsmgrvice ie 'mk pynode -s'
     -h/--harbor-tags    - Push to harbor (only works on vice command)
     -k/--docker-tags    - Push to docker
+    -i/--inject         - Inject updatd project
   """
 }
 
@@ -196,6 +198,9 @@ function parse_long_options() {
         docker_tags='yes'
         local_registry='no'
         ;;
+      --inject)
+        inject=true
+        ;;
       *)
         # Ignore unknown options
         ;;
@@ -207,7 +212,7 @@ function parse_long_options() {
 parse_long_options "$@"
 
 # Now, handle short options
-while getopts "fnshk" opt; do
+while getopts "fnshki" opt; do
     case ${opt} in
         f)
             rebuild_flask=true
@@ -232,6 +237,9 @@ while getopts "fnshk" opt; do
           ## Docker push
           docker_tags='yes'
           local_registry='no'
+          ;;
+        i)
+          inject=true
           ;;
         *)
             # Handle error: unknown option
@@ -306,6 +314,7 @@ esac
 
 # echo "rebuild_flask = $rebuild_flask"
 # echo "rebuild_node = $rebuild_node"
+# echo "inject = $inject"
 # echo "build = $build"
 # echo "shell = $shell"
 # echo "local_registry = ${local_registry}"
@@ -321,16 +330,32 @@ if [[ ${clean} == true ]]; then
   make clean
 fi
 
+# if no -f or -n flag, but -i (just inject)
+if [[ ( ( ${rebuild_flask} == false ) && ( ${rebuild_node} == false ) && ( $inject == true ) ) ]]; then
+  echo "Injecting Flask into running docker project"
+  make SKIPFLASKBUILD=yes reload-vice-flask-app
+  echo "Injecting NextJS into running docker project"
+  make SKIPNODEBUILD=yes reload-vice-node-app
+fi
+
 if [[ ( ( ${rebuild_flask} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building flask module"
   make build-flask-app
   echo "Building flask module complete"
+  if [[ $inject == true ]]; then
+    echo "Injecting Flask into running docker project"
+    make SKIPFLASKBUILD=yes reload-vice-flask-app
+  fi
 fi
 
 if [[ ( ( ${rebuild_node} == true ) && ( ${build} == true ) ) ]]; then
   echo "Building yarn module"
   make build-node-app
   echo "Building yarn module complete"
+  if [[ $inject == true ]]; then
+    echo "Injecting NextJS into running docker project"
+    make SKIPNODEBUILD=yes reload-vice-node-app
+  fi
 fi
 
 if [[ ( ( ${pynode} == true ) && ( ${build} == true ) ) ]]; then

@@ -438,10 +438,11 @@ build-flask-app:
 	./build.sh
 
 ## helper shells into our (running vice) and inserts a new version of the awsmgr!
-reload-vice-flask-app: build-flask-app
+reload-vice-flask-app: $(FLASKBUILD)
 	@echo "Inserting $(VICE_WHL_APP)"
 	@docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	&& docker cp $(VICE_WHL_APP) vice:/mnt/dist/wheels \
+	&& docker cp $(VICE_DKR_DIR)/package/usr/local/bin/update-wheel.sh vice:/usr/local/bin/update-wheel.sh \
 	&& docker exec -it vice /bin/sh -c 'su - gunicorn -c /usr/local/bin/update-wheel.sh' \
 	&& docker exec -it vice /bin/sh -c 'su - cyverse -c /usr/local/bin/update-wheel.sh' \
 	&& docker exec -it vice /bin/sh -c 'supervisorctl restart gunicorn' \
@@ -459,14 +460,14 @@ build-node-app:
 	@echo "Compile/build package for Express/NextJS"
 	$(NODE_DIR)/build.sh
 
-reload-vice-node-app: build-node-app
+reload-vice-node-app: $(NODEBUILD)
 	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
 	@echo "Building viceawsmg $(VICE_DKR_VERSION) image"
 	@if [ ! -f "$(NODE_TGZ_APP)" ]; then (echo "ERROR: $(NODE_TGZ_APP) not found!" && exit 1); fi
 	@echo "Inserting $(NODE_TGZ_APP)"
 	@docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	&& docker cp $(NODE_TGZ_APP) vice:/mnt/dist/npms \
-	&& docker cp $(VICE_DKR_DIR)/usr/local/bin/update-npm.sh vice:/usr/local/bin/update-npm.sh \
+	&& docker cp $(VICE_DKR_DIR)/package/usr/local/bin/update-npm.sh vice:/usr/local/bin/update-npm.sh \
 	&& docker exec -it vice /bin/sh -c 'su - node -c /usr/local/bin/update-npm.sh'
 #  \
 # || { echo "Error while updating package!"; exit 1; } \

@@ -18,7 +18,7 @@ VICE_NAME=viceawsmgr
 FLASK_DIR=./src/flask
 NODE_DIR=./src/ui
 VICE_DIR=./src/vice
-VICE_DKR_DIR=./src/vice/versions/bookworm.v2
+VICE_DKR_DIR=./src/vice/versions/bookworm.v3
 # NVM_DIR=${HOME}/.nvm
 
 CONTEXT=.
