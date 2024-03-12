@@ -74,6 +74,7 @@ PYNODETAGS :=
 PULUMITAGS :=
 AWSMGRTAGS :=
 VICEAWSMGRTAGS :=
+SKIPAWSAUTH :=
 REGISTRY := localhost:5000/
 
 ## Currently Harbor is only letting me post to "appstream"
@@ -134,12 +135,20 @@ else
 FLASKBUILD := build-flask-app
 endif
 
-DKR_ENV_OPTIONS := --env "AWS_KMS_KEY=$(AWS_KMS_KEY)" \
-			--env "AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)" \
-			--env "AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)" \
-			--env "AWS_SESSION_TOKEN"=$(AWS_SESSION_TOKEN) \
-			--env "AWS_DEFAULT_REGION=$(AWS_DEFAULT_REGION)" \
-			--env "AWS_DEFAULT_PROFILE=$(AWS_DEFAULT_PROFILE)"
+ifeq ($(SKIPAWSAUTH),yes)
+SKIP_AUTH_TEST_ENV := --env "SKIP_AUTH_TEST=true"
+else
+SKIP_AUTH_TEST_ENV :=
+endif
+
+DKR_ENV_OPTIONS := --env AWS_KMS_KEY \
+			--env AWS_ACCESS_KEY_ID \
+			--env AWS_SECRET_ACCESS_KEY \
+			--env AWS_SESSION_TOKEN \
+			--env AWS_DEFAULT_REGION \
+			--env AWS_DEFAULT_PROFILE \
+			--env AWS_SESSION_TOKEN_EXPIRATION
+# --env SKIP_AUTH_TEST=true
 
 # No files are created
 .PHONY: all show-vars \
@@ -385,6 +394,7 @@ shell-vice-image:
 		|| docker run \
 			--env "RUNSHELL=$(RUNSHELL)" \
 			$(DKR_ENV_OPTIONS) \
+			$(SKIP_AUTH_TEST_ENV) \
 			--name vice \
 			-p 80:80 \
 			-p 8080:8080 \
