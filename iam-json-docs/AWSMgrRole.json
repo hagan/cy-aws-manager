@@ -1,0 +1,16 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": [
+          "arn:aws:iam::${account_id}:user/${username}",
+          "arn:aws:iam::${account_id}:role/AWSMgrRole",
+          "arn:aws:sts::${account_id}:assumed-role/AWSMgrRole/AWSMgrRoleRoleSession"
+        ]
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}

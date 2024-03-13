@@ -131,7 +131,7 @@ SSO registration scopes [sso:account:access]:
 
 2. Create an IAM policy for our project. Example: `~project~/iam-policies/ua-data7-amwsmgr-policy.json` is a starting point (minimize services & resources needed).
 
-    `$> aws iam create-policy --policy-name AWSManagerFullAccessPolicy --policy-document file://iam-policies/ua-data7-awsmgr-policy.json`
+    `$> aws iam create-policy --policy-name AWSManagerAccessPolicy --policy-document file://iam-policies/ua-data7-awsmgr-policy.json`
 
     Output:
 
@@ -360,6 +360,43 @@ Default output format [None]: json
 
 ## Issues
 
-  - using docker buildx sometimes uninstalls itself?
-    $ apt install docker-buildx-plugin
-    $ docker buildx install
+  - ## using docker buildx sometimes uninstalls itself?
+
+    `$> apt install docker-buildx-plugin`
+
+    `$> docker buildx install`
+
+  - ## Getting an error about AssumeRole "AccessDenied"
+
+    ```
+    botocore.exceptions.ClientError: An error occurred (AccessDenied) when calling the AssumeRole operation: User: arn:aws:sts::ACCOUNT ID:assumed-role/AWSManagerRole/AwsManagerRoleSession is not authorized to perform: sts:AssumeRole on resource: arn:aws:iam::ACCOUNT ID:role/AWSManagerRole
+    ```
+
+    Update your role with a policy (update with your account id here -> <project>/iam-policies/ua-data7-awsmgrsession-trust-policy.json)
+
+    `$> aws iam create-policy --policy-name AssumeAWSManagerRolePolicy --policy-document file://iam-policies/ua-data7-awsmgrsession-trust-policy.json --profile <your admin profile>`
+
+    Returns:
+
+    ```
+    {
+        "Policy": {
+            "PolicyName": "AssumeAWSManagerRolePolicy",
+            "PolicyId": "ANPA**************G2",
+            "Arn": "arn:aws:iam::1**********5:policy/AssumeAWSManagerRolePolicy",
+            "Path": "/",
+            "DefaultVersionId": "v1",
+            "AttachmentCount": 0,
+            "PermissionsBoundaryUsageCount": 0,
+            "IsAttachable": true,
+            "CreateDate": "2000-01-01T00:00:00+00:00",
+            "UpdateDate": "2024-01-01T00:00:00+00:00"
+        }
+    }
+    ```
+
+    Manually give our AWSManagerRole a policy that it can assume itself. Likely, this effectively means someone can renew the session token indefinitely
+
+    `$> aws iam attach-role-policy --role-name AWSManagerRole --policy-arn "arn:aws:iam::${aws_account_id}:policy/AssumeAWSManagerRolePolicy" --profile <your admin profile>`
+
+    Now should attach to session when you run `mk generate-aws-token`

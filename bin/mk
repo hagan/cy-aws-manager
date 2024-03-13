@@ -15,19 +15,9 @@ else
   trap cleanup EXIT
 fi
 
-if [[ -z $MK_AWS_PROFILE ]]; then
-  echo >&2 "ERROR: Must set MK_AWS_PROFILE!"
+if [[ ! -z $AWS_ADMIN_USER ]]; then
+  echo >&2 "ERROR: Must set AWS_ADMIN_USER!"
   exit 1
-fi
-
-mkstatefile='/tmp/mk-state'
-
-declare _MK_LAST_CMD
-
-if [ -f "${mkstatefile}" ]; then
-  read -r _MK_LAST_CMD <"${mkstatefile}"
-else
-  _MK_LAST_CMD=""
 fi
 
 local_registry='yes'
@@ -48,6 +38,8 @@ skip_auth_check='no'
 build=true
 shell=false
 save_args=$@
+
+_AWSPROFILENAME=
 
 if [[ $1 != -* ]]; then
   command="$1"
@@ -73,6 +65,15 @@ function show_help() {
     all    - Builds pynode, pulumi, awsmgr then vice in that order.
     generate-aws-token  -- Generate temporary token for aws
 
+    iam-1  - Create IAM Policy for S3
+    iam-2  - Create IAM Policy for EC2
+    iam-3  - Create IAM Policy for VPC
+    iam-4  - Create IAM Policy for Lambda
+    iam-5  - Create IAM Policy for AssumeRole
+    iam-6  - Create IAM Role AWSMgrRole linking policies for S3, EC2, VPC and Lambda
+    iam-7  - Generate Temporary Session Token for AWSMgrRole
+    test-regen - Regenerate using temporary tokens
+
   FLAGS
     -f/--rebuild-flask   - Builds flask wheel package in dist for awsmgr/vice images
     -n/--rebuild-node    - Builds NextJS tgz package in dist for awsmgr/vice images
@@ -81,6 +82,7 @@ function show_help() {
     -k/--docker-tags     - Push to docker
     -i/--inject          - Inject updatd project
     -a/--skip-auth-check - Skip auth check at startup
+    -p/--profile         - AWS profile to use
   """
 }
 
@@ -124,128 +126,296 @@ function load_registry() {
 
 function get_aws_account_id() {
   aws_account_id=$(\
-      aws --profile ${MK_AWS_PROFILE} \
-      sts get-caller-identity \
-        | jq -r .Account \
-      || { \
-        >&2 echo "ERROR: failed to get AWS Account ID."; \
-        exit 1; \
-      } \
-    )
+    aws \
+    sts get-caller-identity $@ | jq -r .Account \
+    || { \
+      >&2 echo "ERROR: failed to get AWS Account ID."; \
+      exit 1; \
+    } \
+  )
+  if [[ $? -ne 0 ]]; then
+    >&2 echo "ERROR: did not capture Account ID!"
+    exit 1
+  fi
+  echo "${aws_account_id}"
 }
 
-function generate_aws_token() {
-  if [[ -z ${AWS_ADMIN_PROFILE} ]]; then
-    AWS_ADMIN_PROFILE=default
-    echo "AWS_ADMIN_PROFILE='default'" >> ${PRJ_ROOT_DIR}/.env
-  else
-    echo "Using AWS Profile: $AWS_ADMIN_PROFILE for your cli profile..."
+# function generate_aws_token() {
+#   if [[ -z ${AWS_ADMIN_PROFILE} ]]; then
+#     AWS_ADMIN_PROFILE=default
+#     echo "AWS_ADMIN_PROFILE='default'" >> ${PRJ_ROOT_DIR}/.env
+#   else
+#     echo "Using AWS Profile: $AWS_ADMIN_PROFILE for your cli profile..."
+#   fi
+
+#   aws_account_id=$(\
+#       aws sts get-caller-identity --profile $AWS_ADMIN_PROFILE \
+#         | jq -r .Account \
+#       || { \
+#         >&2 echo "ERROR: failed to get AWS Account ID."; \
+#         exit 1; \
+#       } \
+#     )
+#     echo "AWS Account ID: ${aws_account_id}"
+#     # min 900 seconds or 8 hours max?
+#     if [[ ! -z ${aws_account_id} ]]; then
+#       aws_output=$(\
+#         aws --profile ${AWS_ADMIN_PROFILE} sts assume-role \
+#         --role-arn "arn:aws:iam::${aws_account_id}:role/AWSManagerRole" \
+#         --role-session-name "AwsManagerRoleSession" \
+#         --duration-seconds 900 \
+#       )
+#       AWS_ACCESS_KEY_ID=$(echo ${aws_output} | jq -r '.Credentials.AccessKeyId')
+#       AWS_SECRET_ACCESS_KEY=$(echo ${aws_output} | jq -r '.Credentials.SecretAccessKey')
+#       AWS_SESSION_TOKEN=$(echo ${aws_output} | jq -r '.Credentials.SessionToken')
+#       AWS_SESSION_TOKEN_EXPIRATION=$(echo ${aws_output} | jq -r '.Credentials.Expiration')
+#       echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+#       echo "AWS_SESSION_TOKEN_EXPIRATION=$AWS_SESSION_TOKEN_EXPIRATION"
+#       if [[ -f ${PRJ_ROOT_DIR}/.env ]]; then
+#         if ! grep -q "AWS_ACCESS_KEY_ID=" ${PRJ_ROOT_DIR}/.env; then
+#           echo "AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'" >> ${PRJ_ROOT_DIR}/.env
+#         else
+#           sed -i "s|^AWS_ACCESS_KEY_ID=.*|AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'|" ${PRJ_ROOT_DIR}/.env
+#         fi
+#         if ! grep -q "AWS_SECRET_ACCESS_KEY=" ${PRJ_ROOT_DIR}/.env; then
+#           echo "AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'" >> ${PRJ_ROOT_DIR}/.env
+#         else
+#           sed -i "s|^AWS_SECRET_ACCESS_KEY=.*|AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'|" ${PRJ_ROOT_DIR}/.env
+#         fi
+#         if ! grep -q "AWS_SESSION_TOKEN=" ${PRJ_ROOT_DIR}/.env; then
+#           echo "AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'" >> ${PRJ_ROOT_DIR}/.env
+#         else
+#           sed -i "s|^AWS_SESSION_TOKEN=.*|AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'|" ${PRJ_ROOT_DIR}/.env
+#         fi
+#         if ! grep -q "AWS_SESSION_TOKEN_EXPIRATION=" ${PRJ_ROOT_DIR}/.env; then
+#           echo "AWS_SESSION_TOKEN_EXPIRATION='${AWS_SESSION_TOKEN_EXPIRATION}'" >> ${PRJ_ROOT_DIR}/.env
+#         else
+#           sed -i "s|^AWS_SESSION_TOKEN_EXPIRATION=.*|AWS_SESSION_TOKEN_EXPIRATION='${AWS_SESSION_TOKEN_EXPIRATION}'|" ${PRJ_ROOT_DIR}/.env
+#         fi
+#       else
+#         >&2 echo "ERROR: missing ${PRJ_ROOT_DIR}/.env!"
+#       fi
+#     fi
+# }
+
+function setup_iam_step_1() {
+  STEP_1_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrS3Policy.json"
+  if [[ ! -f ${STEP_1_FILE} ]]; then
+    >&2 echo "ERROR: '${STEP_1_FILE}' is missing!"
+    exit 1
+  fi
+  echo "Creating S3 policy from file '${STEP_1_FILE}'"
+  aws iam create-policy --policy-name AWSMgrS3Policy --policy-document file://${STEP_1_FILE} $@
+}
+
+function setup_iam_step_2() {
+  JSON_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrEc2Policy.json"
+  if [[ ! -f ${JSON_FILE} ]]; then
+    >&2 echo "ERROR: '${JSON_FILE}' is missing!"
+    exit 1
+  fi
+  echo "Creating EC2 policy from file '${JSON_FILE}'"
+  aws iam create-policy --policy-name AWSMgrEc2Policy --policy-document file://${JSON_FILE} $@
+}
+
+function setup_iam_step_3() {
+  JSON_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrVPCPolicy.json"
+  if [[ ! -f ${JSON_FILE} ]]; then
+    >&2 echo "ERROR: '${JSON_FILE}' is missing!"
+    exit 1
+  fi
+  echo "Creating VPC policy from file '${JSON_FILE}'"
+  aws iam create-policy --policy-name AWSMgrVPCPolicy --policy-document file://${JSON_FILE} $@
+}
+
+function setup_iam_step_4() {
+  JSON_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrLambdaPolicy.json"
+  if [[ ! -f ${JSON_FILE} ]]; then
+    >&2 echo "ERROR: '${JSON_FILE}' is missing!"
+    exit 1
+  fi
+  echo "Creating Lambda policy from file '${JSON_FILE}'"
+  aws iam create-policy --policy-name AWSMgrLambdaPolicy --policy-document file://${JSON_FILE} $@
+}
+
+function setup_iam_step_5() {
+  JSON_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrAssumeRolePolicy.json"
+  TEMP_FILE="${PRJ_ROOT_DIR}/trashbin/temp.json"
+  if [[ ! -f ${JSON_FILE} ]]; then
+    >&2 echo "ERROR: '${JSON_FILE}' is missing!"
+    exit 1
+  fi
+  if [[ -f ${TEMP_FILE} ]]; then
+    >&2 echo "ERROR: '${TEMP_FILE}' exists!"
+    exit 1
+  fi
+  account_id=$(get_aws_account_id $@)
+  sed "s/\${account_id}/${account_id}/g" ${JSON_FILE} > ${TEMP_FILE}
+  echo "Creating AssumeRole policy from file '${TEMP_FILE}'"
+  aws iam create-policy --policy-name AWSMgrAssumeRolePolicy --policy-document file://${TEMP_FILE} $@
+  rm ${TEMP_FILE}
+}
+
+function setup_iam_step_6() {
+  JSON_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrRole.json"
+  TEMP_FILE="${PRJ_ROOT_DIR}/trashbin/temp.json"
+  if [[ ! -f ${JSON_FILE} ]]; then
+    >&2 echo "ERROR: '${JSON_FILE}' is missing!"
+    exit 1
+  fi
+  if [[ -f ${TEMP_FILE} ]]; then
+    >&2 echo "ERROR: '${TEMP_FILE}' exists!"
+    exit 1
+  fi
+  account_id=$(get_aws_account_id $@)
+  sed "s/\${account_id}/${account_id}/g" ${JSON_FILE} > ${TEMP_FILE}
+  sed -i "s/\${username}/${AWS_ADMIN_USER}/g" ${TEMP_FILE}
+  if [[ ! -f ${TEMP_FILE} ]]; then
+    >&2 echo "ERROR: '${TEMP_FILE}' failed to generate temporary json document"
+    exit 1
   fi
 
-  aws_account_id=$(\
-      aws --profile ${AWS_ADMIN_PROFILE} \
-      sts get-caller-identity \
-        | jq -r .Account \
-      || { \
-        >&2 echo "ERROR: failed to get AWS Account ID."; \
-        exit 1; \
-      } \
-    )
-    echo "AWS Account ID: ${aws_account_id}"
-    # min 900 seconds or 8 hours max?
-    if [[ ! -z ${aws_account_id} ]]; then
-      aws_output=$(\
-        aws --profile ${AWS_ADMIN_PROFILE} sts assume-role \
-        --role-arn "arn:aws:iam::${aws_account_id}:role/AWSManagerRole" \
-        --role-session-name "AwsManagerRoleSession" \
-        --duration-seconds 900 \
-      )
+  aws iam create-role --role-name AWSMgrRole --assume-role-policy-document file://${TEMP_FILE} $@  || exit 1
+  aws iam attach-role-policy --role-name AWSMgrRole \
+    --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrS3Policy $@ || exit 1
+  aws iam attach-role-policy --role-name AWSMgrRole \
+    --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrEc2Policy $@ || exit 1
+  aws iam attach-role-policy --role-name AWSMgrRole \
+    --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrVPCPolicy $@ || exit 1
+  aws iam attach-role-policy --role-name AWSMgrRole \
+    --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrLambdaPolicy $@ || exit 1
+  aws iam attach-role-policy --role-name AWSMgrRole \
+    --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrAssumeRolePolicy $@ || exit 1
 
-      ## @TODO: fix, needs to attach-role-policy?
-      AWS_ACCESS_KEY_ID=$(echo ${aws_output} | jq -r '.Credentials.AccessKeyId')
-      AWS_SECRET_ACCESS_KEY=$(echo ${aws_output} | jq -r '.Credentials.SecretAccessKey')
-      AWS_SESSION_TOKEN=$(echo ${aws_output} | jq -r '.Credentials.SessionToken')
-      AWS_SESSION_TOKEN_EXPIRATION=$(echo ${aws_output} | jq -r '.Credentials.Expiration')
-      echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
-      echo "AWS_SESSION_TOKEN_EXPIRATION=$AWS_SESSION_TOKEN_EXPIRATION"
-      if [[ -f ${PRJ_ROOT_DIR}/.env ]]; then
-        if ! grep -q "AWS_ACCESS_KEY_ID=" ${PRJ_ROOT_DIR}/.env; then
-          echo "AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'" >> ${PRJ_ROOT_DIR}/.env
-        else
-          sed -i "s|^AWS_ACCESS_KEY_ID=.*|AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'|" ${PRJ_ROOT_DIR}/.env
-        fi
-        if ! grep -q "AWS_SECRET_ACCESS_KEY=" ${PRJ_ROOT_DIR}/.env; then
-          echo "AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'" >> ${PRJ_ROOT_DIR}/.env
-        else
-          sed -i "s|^AWS_SECRET_ACCESS_KEY=.*|AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'|" ${PRJ_ROOT_DIR}/.env
-        fi
-        if ! grep -q "AWS_SESSION_TOKEN=" ${PRJ_ROOT_DIR}/.env; then
-          echo "AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'" >> ${PRJ_ROOT_DIR}/.env
-        else
-          sed -i "s|^AWS_SESSION_TOKEN=.*|AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'|" ${PRJ_ROOT_DIR}/.env
-        fi
-        if ! grep -q "AWS_SESSION_TOKEN_EXPIRATION=" ${PRJ_ROOT_DIR}/.env; then
-          echo "AWS_SESSION_TOKEN_EXPIRATION='${AWS_SESSION_TOKEN_EXPIRATION}'" >> ${PRJ_ROOT_DIR}/.env
-        else
-          sed -i "s|^AWS_SESSION_TOKEN_EXPIRATION=.*|AWS_SESSION_TOKEN_EXPIRATION='${AWS_SESSION_TOKEN_EXPIRATION}'|" ${PRJ_ROOT_DIR}/.env
-        fi
+  rm ${TEMP_FILE}
+}
+
+function setup_iam_step_7() {
+  account_id=$(get_aws_account_id $@)
+  aws_output=$(\
+    aws sts assume-role \
+      --role-arn "arn:aws:iam::${account_id}:role/AWSMgrRole" \
+      --role-session-name "AWSMgrRoleSession" \
+      --duration-seconds 900 $@ \
+    )
+    if [[ $? -ne 0 ]]; then
+      >&2 echo "ERROR: issue generating token from STS"
+      exit 1
+    fi
+
+    AWS_ACCESS_KEY_ID=$(echo ${aws_output} | jq -r '.Credentials.AccessKeyId')
+    AWS_SECRET_ACCESS_KEY=$(echo ${aws_output} | jq -r '.Credentials.SecretAccessKey')
+    AWS_SESSION_TOKEN=$(echo ${aws_output} | jq -r '.Credentials.SessionToken')
+    AWS_SESSION_TOKEN_EXPIRATION=$(echo ${aws_output} | jq -r '.Credentials.Expiration')
+    echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+    echo "AWS_SESSION_TOKEN_EXPIRATION=$AWS_SESSION_TOKEN_EXPIRATION"
+    if [[ -f ${PRJ_ROOT_DIR}/.env ]]; then
+      if ! grep -q "AWS_ACCESS_KEY_ID=" ${PRJ_ROOT_DIR}/.env; then
+        echo "AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'" >> ${PRJ_ROOT_DIR}/.env
       else
-        >&2 echo "ERROR: missing ${PRJ_ROOT_DIR}/.env!"
+        sed -i "s|^AWS_ACCESS_KEY_ID=.*|AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'|" ${PRJ_ROOT_DIR}/.env
       fi
+      if ! grep -q "AWS_SECRET_ACCESS_KEY=" ${PRJ_ROOT_DIR}/.env; then
+        echo "AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'" >> ${PRJ_ROOT_DIR}/.env
+      else
+        sed -i "s|^AWS_SECRET_ACCESS_KEY=.*|AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'|" ${PRJ_ROOT_DIR}/.env
+      fi
+      if ! grep -q "AWS_SESSION_TOKEN=" ${PRJ_ROOT_DIR}/.env; then
+        echo "AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'" >> ${PRJ_ROOT_DIR}/.env
+      else
+        sed -i "s|^AWS_SESSION_TOKEN=.*|AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'|" ${PRJ_ROOT_DIR}/.env
+      fi
+      if ! grep -q "AWS_SESSION_TOKEN_EXPIRATION=" ${PRJ_ROOT_DIR}/.env; then
+        echo "AWS_SESSION_TOKEN_EXPIRATION='${AWS_SESSION_TOKEN_EXPIRATION}'" >> ${PRJ_ROOT_DIR}/.env
+      else
+        sed -i "s|^AWS_SESSION_TOKEN_EXPIRATION=.*|AWS_SESSION_TOKEN_EXPIRATION='${AWS_SESSION_TOKEN_EXPIRATION}'|" ${PRJ_ROOT_DIR}/.env
+      fi
+    else
+      >&2 echo "ERROR: missing ${PRJ_ROOT_DIR}/.env!"
     fi
 }
 
-function parse_long_options() {
-  for arg in "$@"; do
-    case $arg in
-      --rebuild-flask)
-        rebuild_flask = true
-        ;;
-      --rebuild-node)
-        rebuild_node = true
-        ;;
-      --shell)
-        valid_commands=("pynode" "pulumi" "awsmgr" "vice")
-        found=0
-        for cmd in "${valid_commands[@]}"; do
-          if [[ "$cmd" == "$command" ]]; then
-            found=1
-            break
-          fi
-        done
-        if [[ $found -ne 1 ]]; then
-            echo >&2 "ERROR: cannot run shell with $command"
-            exit 1
-          fi
-          build=false
-          shell=true
-        ;;
-      --harbor-tags)
-        harbor_tags='yes'
-        local_registry='no'
-        ;;
-      --docker-tags)
-        docker_tags='yes'
-        local_registry='no'
-        ;;
-      --inject)
-        inject=true
-        ;;
-      --skip-auth-check)
-        skip_auth_check='yes'
-        ;;
-      *)
-        # Ignore unknown options
-        ;;
-    esac
-  done
+function test_regen() {
+  account_id=$(get_aws_account_id $@)
+  if [[ -f ${PRJ_ROOT_DIR}/.env ]]; then
+    source ${PRJ_ROOT_DIR}/.env
+  else
+    >&2 echo "ERROR: Missing ${PRJ_ROOT_DIR}/.env!"
+    exit 1
+  fi
+  echo "AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'"
+  # aws sts assume-role \
+  #     --role-arn "arn:aws:iam::${account_id}:role/AWSMgrRole" \
+  #     --role-session-name "AWSMgrRoleRoleSession" \
+  #     --duration-seconds 900
+  aws sts assume-role \
+    --role-arn "arn:aws:iam::${account_id}:role/AWSMgrRole" \
+    --role-session-name "AWSMgrRoleRoleSession" \
+    --duration-seconds 900
 }
 
-# First, handle long options
-parse_long_options "$@"
+for arg in "$@"; do
+  case $arg in
+    --rebuild-flask)
+      rebuild_flask=true
+      shift
+      ;;
+    --rebuild-node)
+      rebuild_node=true
+      shift
+      ;;
+    --shell)
+      valid_commands=("pynode" "pulumi" "awsmgr" "vice")
+      found=0
+      for cmd in "${valid_commands[@]}"; do
+        if [[ "$cmd" == "$command" ]]; then
+          found=1
+          break
+        fi
+      done
+      if [[ $found -ne 1 ]] && [[ -z $command ]]; then
+        >&2 echo "ERROR: must include a command (pynode, pulumi, awsmgr, vice...) with --shell option!"
+        exit 1
+      elif [[ $found -ne 1 ]] && [[ ! -z $command ]]; then
+        echo >&2 "ERROR: cannot run shell with $command"
+        exit 1
+      fi
+      build=false
+      shell=true
+      shift
+      ;;
+    --harbor-tags)
+      harbor_tags='yes'
+      local_registry='no'
+      shift
+      ;;
+    --docker-tags)
+      docker_tags='yes'
+      local_registry='no'
+      shift
+      ;;
+    --inject)
+      inject=true
+      shift
+      ;;
+    --skip-auth-check)
+      skip_auth_check='yes'
+      shift
+      ;;
+    --profile=*)
+      _AWSPROFILENAME="--profile ${arg#*=}"
+      shift
+      ;;
+    --profile)
+      _AWSPROFILENAME="--profile $2"
+      shift
+      shift
+      ;;
+  esac
+done
 
 # Now, handle short options
-while getopts "fnshkia" opt; do
+while getopts "fnshkiap:" opt; do
     case ${opt} in
         f)
             rebuild_flask=true
@@ -276,6 +446,9 @@ while getopts "fnshkia" opt; do
           ;;
         a)
           skip_auth_check='yes'
+          ;;
+        p)
+          _AWSPROFILENAME="--profile $OPTARG"
           ;;
         *)
             # Handle error: unknown option
@@ -330,14 +503,40 @@ case $command in
     ;;
   generate-aws-token)
     generate_aws_token
+    exit $?
     ;;
-  last)
-    if [[ -z ${_MK_LAST_CMD} ]]; then
-      echo "No last action!"
-    else
-      # echo "RUNNING $0 ${_MK_LAST_CMD}"
-      $0 ${_MK_LAST_CMD}
-    fi
+  iam-1)
+    setup_iam_step_1 "${_AWSPROFILENAME}"
+    exit $?
+    ;;
+  iam-2)
+    setup_iam_step_2 "${_AWSPROFILENAME}"
+    exit $?
+    ;;
+  iam-3)
+    setup_iam_step_3 "${_AWSPROFILENAME}"
+    exit $?
+    ;;
+  iam-4)
+    setup_iam_step_4 "${_AWSPROFILENAME}"
+    exit $?
+    ;;
+  iam-5)
+    setup_iam_step_5 "${_AWSPROFILENAME}"
+    exit $?
+    ;;
+  iam-6)
+    setup_iam_step_6 "${_AWSPROFILENAME}"
+    exit $?
+    ;;
+  generate-aws-token)
+  iam-7)
+    setup_iam_step_7 "${_AWSPROFILENAME}"
+    exit $?
+    ;;
+  test-regen)
+    test_regen "${_AWSPROFILENAME}"
+    exit $?
     ;;
   '')
     echo "..."
@@ -429,8 +628,4 @@ if [[ ( ( ${vice} == true ) && ( ${build} == true ) ) ]]; then
 elif [[ ( ( ${vice} == true ) && ( ${shell} == true ) ) ]]; then
   echo "Shelling into vice"
   make SKIPAWSAUTH=${skip_auth_check} shell-vice-image
-fi
-
-if [[ $command != 'last' ]]; then
-  printf "%s\n" "${save_args}" >"${mkstatefile}"
 fi

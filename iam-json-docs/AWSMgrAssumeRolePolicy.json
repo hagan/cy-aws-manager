@@ -4,8 +4,7 @@
         {
             "Effect": "Allow",
             "Action": "sts:AssumeRole",
-            "Resource": "arn:aws:iam::<YOUR ACCOUNT ID HERE>:role/AWSManagerRole/AwsManagerRoleSession"
-
+            "Resource": "arn:aws:iam::${account_id}:role/AWSMgrRole"
         }
     ]
 }
