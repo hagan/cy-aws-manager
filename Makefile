@@ -28,7 +28,7 @@ AWSMGR_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_AWSMGR_DKR_DIR))"
 VICE_DKR_VERSION ?=  $(shell readlink $(LATEST_VICE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
 VICE_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_VICE_DKR_DIR))"
 
-## for apple uncomment 
+## for apple uncomment
 # PLATFORMS := linux/amd64,linux/arm64
 PLATFORMS := linux/amd64
 LOCAL_PLATFORM ?= linux/arm64
@@ -141,13 +141,14 @@ else
 SKIP_AUTH_TEST_ENV :=
 endif
 
-DKR_ENV_OPTIONS := --env AWS_KMS_KEY \
+## don't forget to whitelist these in entrypoint.sh!!
+DKR_ENV_OPTIONS := \
+			--env AWS_ACCOUNT_ID \
 			--env AWS_ACCESS_KEY_ID \
 			--env AWS_SECRET_ACCESS_KEY \
 			--env AWS_SESSION_TOKEN \
 			--env AWS_DEFAULT_REGION \
-			--env AWS_DEFAULT_PROFILE \
-			--env AWS_SESSION_TOKEN_EXPIRATION
+			--env AWS_CREDENTIAL_EXPIRATION
 # --env SKIP_AUTH_TEST=true
 
 # No files are created
@@ -440,6 +441,19 @@ shell-cyverse-vice-image:
 		--whitelist-environment AWS_SESSION_TOKEN \
 		-l cyverse \
 	  || { echo "ERROR: vice image not running!"; exit 1; }
+
+
+echo-creds-cyverse-vice-image:
+	@cd $(VICE_DKR_DIR); \
+	docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
+	  && docker exec \
+	    $(DKR_ENV_OPTIONS) \
+		-it vice /usr/bin/su \
+		-l cyverse -c "echo '$${AWS_ACCESS_KEY_ID}'"
+
+shell-creds-cyverse-vice-image:
+	@echo "SERIOUSLY LIKE WTF"
+	ASSIGNTHIS ?= "hahahah"
 
 
 build-flask-app:

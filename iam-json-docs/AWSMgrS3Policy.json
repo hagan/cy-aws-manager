@@ -8,7 +8,7 @@
                 "s3:DeleteBucket",
                 "s3:ListBucket"
             ],
-            "Resource": "arn:aws:s3:::cy-awsmgr-bucket-2024"
+            "Resource": "arn:aws:s3:::cy-awsmgr-bucket-2024*"
         },
         {
             "Effect": "Allow",
@@ -18,7 +18,7 @@
                 "s3:DeleteObject",
                 "s3:PutObjectAcl"
             ],
-            "Resource": "arn:aws:s3:::cy-awsmgr-bucket-2024/*"
+            "Resource": "arn:aws:s3:::cy-awsmgr-bucket-2024*/*"
         }
     ]
 }
