@@ -52,6 +52,10 @@ $ apt install git-lfs
 
 And you do not need to run `git lfs install` as hooks are already in .git/hook or .husky folders.
 
+To add a file:
+
+`$> ` 
+
 ## Compiling docker images
 
 #### Setup our builder environment

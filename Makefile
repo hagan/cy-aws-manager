@@ -332,7 +332,6 @@ compress-vice-package:
 	@test -f "$(VICE_DKR_DIR)/package.tar.gz" && { rm $(VICE_DKR_DIR)/package.tar.gz && echo "removed $(VICE_DKR_DIR)/package.tar.gz"; } || true
 	@tar cvfz $(VICE_DKR_DIR)/package.tar.gz --owner=root --group=root -C $(VICE_DKR_DIR)/package .
 
-
 build-vice-image: all compress-vice-package $(FLASKBUILD) $(NODEBUILD)
 	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
 	@echo "$(date +%T) - Building viceawsmg $(VICE_DKR_VERSION) image from $(VICE_DKR_DIR)/Dockerfile!"
@@ -455,7 +454,6 @@ shell-creds-cyverse-vice-image:
 	@echo "SERIOUSLY LIKE WTF"
 	ASSIGNTHIS ?= "hahahah"
 
-
 build-flask-app:
 	@echo "Compile/build package for flask..."
 	cd $(FLASK_DIR) && \
@@ -526,7 +524,7 @@ build:
 		--build-arg DOCKER_DIR=$(DOCKER_DIR) \
 		$(CONTEXT)
 
-#  		--env "SOCKET_FILE=/tmp/node-nextjs.socket"
+# --env "SOCKET_FILE=/tmp/node-nextjs.socket"
 
 start:
 	@echo "Starting Docker container..."
