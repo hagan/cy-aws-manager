@@ -67,6 +67,7 @@ function show_help() {
     update-key-from-vice    - If vice is running, clones keys and stashes in
                               the .env file.
 
+    iam-0  - Create IAM Policy for DyanmoDB
     iam-1  - Create IAM Policy for S3
     iam-2  - Create IAM Policy for EC2
     iam-3  - Create IAM Policy for VPC
@@ -156,25 +157,25 @@ update_keys_from_vice() {
   echo "AWS_CREDENTIAL_EXPIRATION=$CUR_AWS_CREDENTIAL_EXPIRATION"
   if [[ -f ${PRJ_ROOT_DIR}/.env ]]; then
     if ! grep -q "AWS_ACCESS_KEY_ID=" ${PRJ_ROOT_DIR}/.env; then
-      echo "AWS_ACCESS_KEY_ID='${CUR_AWS_ACCESS_KEY_ID}'" >> ${PRJ_ROOT_DIR}/.env
+      echo -e "AWS_ACCESS_KEY_ID='${CUR_AWS_ACCESS_KEY_ID}'\n" >> ${PRJ_ROOT_DIR}/.env
     else
       sed -i "s|^AWS_ACCESS_KEY_ID=.*|AWS_ACCESS_KEY_ID='${CUR_AWS_ACCESS_KEY_ID}'|" ${PRJ_ROOT_DIR}/.env
     fi
 
     if ! grep -q "AWS_SECRET_ACCESS_KEY=" ${PRJ_ROOT_DIR}/.env; then
-      echo "AWS_SECRET_ACCESS_KEY='${CUR_AWS_SECRET_ACCESS_KEY}'" >> ${PRJ_ROOT_DIR}/.env
+      echo -e "AWS_SECRET_ACCESS_KEY='${CUR_AWS_SECRET_ACCESS_KEY}'\n" >> ${PRJ_ROOT_DIR}/.env
     else
       sed -i "s|^AWS_SECRET_ACCESS_KEY=.*|AWS_SECRET_ACCESS_KEY='${CUR_AWS_SECRET_ACCESS_KEY}'|" ${PRJ_ROOT_DIR}/.env
     fi
 
     if ! grep -q "AWS_SESSION_TOKEN=" ${PRJ_ROOT_DIR}/.env; then
-      echo "AWS_SESSION_TOKEN='${CUR_AWS_SESSION_TOKEN}'" >> ${PRJ_ROOT_DIR}/.env
+      echo -e "AWS_SESSION_TOKEN='${CUR_AWS_SESSION_TOKEN}'\n" >> ${PRJ_ROOT_DIR}/.env
     else
       sed -i "s|^AWS_SESSION_TOKEN=.*|AWS_SESSION_TOKEN='${CUR_AWS_SESSION_TOKEN}'|" ${PRJ_ROOT_DIR}/.env
     fi
 
     if ! grep -q "AWS_CREDENTIAL_EXPIRATION=" ${PRJ_ROOT_DIR}/.env; then
-      echo "AWS_CREDENTIAL_EXPIRATION='${CUR_AWS_CREDENTIAL_EXPIRATION}'" >> ${PRJ_ROOT_DIR}/.env
+      echo -e "AWS_CREDENTIAL_EXPIRATION='${CUR_AWS_CREDENTIAL_EXPIRATION}'\n" >> ${PRJ_ROOT_DIR}/.env
     else
       sed -i "s|^AWS_CREDENTIAL_EXPIRATION=.*|AWS_CREDENTIAL_EXPIRATION='${CUR_AWS_CREDENTIAL_EXPIRATION}'|" ${PRJ_ROOT_DIR}/.env
     fi
@@ -185,6 +186,15 @@ update_keys_from_vice() {
   fi
 }
 
+function setup_iam_step_0() {
+  STEP_0_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrDynamoDBPolicy.json"
+  if [[ ! -f ${STEP_0_FILE} ]]; then
+    >&2 echo "ERROR: '${STEP_0_FILE}' is missing!"
+    exit 1
+  fi
+  echo "Creating DynamoDB policy from file '${STEP_0_FILE}'"
+  aws iam create-policy --policy-name AWSMgrDynamoDBPolicy --policy-document file://${STEP_0_FILE} $@
+}
 
 function setup_iam_step_1() {
   STEP_1_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrS3Policy.json"
@@ -265,6 +275,8 @@ function setup_iam_step_6() {
 
   aws iam create-role --role-name AWSMgrRole --assume-role-policy-document file://${TEMP_FILE} $@  || exit 1
   aws iam attach-role-policy --role-name AWSMgrRole \
+    --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrDynamoDBPolicy $@ || exit 1
+  aws iam attach-role-policy --role-name AWSMgrRole \
     --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrS3Policy $@ || exit 1
   aws iam attach-role-policy --role-name AWSMgrRole \
     --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrEc2Policy $@ || exit 1
@@ -296,25 +308,31 @@ function setup_iam_step_7() {
     AWS_SESSION_TOKEN=$(echo ${aws_output} | jq -r '.Credentials.SessionToken')
     AWS_CREDENTIAL_EXPIRATION=$(echo ${aws_output} | jq -r '.Credentials.Expiration')
     echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+    echo "AWS_ACCOUNT_ID=${account_id}"
     echo "AWS_CREDENTIAL_EXPIRATION=$AWS_CREDENTIAL_EXPIRATION"
     if [[ -f ${PRJ_ROOT_DIR}/.env ]]; then
+      if ! grep -q "AWS_ACCOUNT_ID=" ${PRJ_ROOT_DIR}/.env; then
+        echo -e "\nAWS_ACCOUNT_ID='${account_id}'" >> ${PRJ_ROOT_DIR}/.env
+      else
+        sed -i "s|^AWS_ACCOUNT_ID=.*|AWS_ACCOUNT_ID='${account_id}'|" ${PRJ_ROOT_DIR}/.env
+      fi
       if ! grep -q "AWS_ACCESS_KEY_ID=" ${PRJ_ROOT_DIR}/.env; then
-        echo "AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'" >> ${PRJ_ROOT_DIR}/.env
+        echo -e "\nAWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'" >> ${PRJ_ROOT_DIR}/.env
       else
         sed -i "s|^AWS_ACCESS_KEY_ID=.*|AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'|" ${PRJ_ROOT_DIR}/.env
       fi
       if ! grep -q "AWS_SECRET_ACCESS_KEY=" ${PRJ_ROOT_DIR}/.env; then
-        echo "AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'" >> ${PRJ_ROOT_DIR}/.env
+        echo -e "\nAWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'" >> ${PRJ_ROOT_DIR}/.env
       else
         sed -i "s|^AWS_SECRET_ACCESS_KEY=.*|AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'|" ${PRJ_ROOT_DIR}/.env
       fi
       if ! grep -q "AWS_SESSION_TOKEN=" ${PRJ_ROOT_DIR}/.env; then
-        echo "AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'" >> ${PRJ_ROOT_DIR}/.env
+        echo -e "\nAWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'" >> ${PRJ_ROOT_DIR}/.env
       else
         sed -i "s|^AWS_SESSION_TOKEN=.*|AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}'|" ${PRJ_ROOT_DIR}/.env
       fi
       if ! grep -q "AWS_CREDENTIAL_EXPIRATION=" ${PRJ_ROOT_DIR}/.env; then
-        echo "AWS_CREDENTIAL_EXPIRATION='${AWS_CREDENTIAL_EXPIRATION}'" >> ${PRJ_ROOT_DIR}/.env
+        echo -e "\nAWS_CREDENTIAL_EXPIRATION='${AWS_CREDENTIAL_EXPIRATION}'" >> ${PRJ_ROOT_DIR}/.env
       else
         sed -i "s|^AWS_CREDENTIAL_EXPIRATION=.*|AWS_CREDENTIAL_EXPIRATION='${AWS_CREDENTIAL_EXPIRATION}'|" ${PRJ_ROOT_DIR}/.env
       fi
@@ -491,6 +509,10 @@ case $command in
     ;;
   update-key-from-vice)
     update_keys_from_vice
+    exit $?
+    ;;
+  iam-0)
+    setup_iam_step_0 "${_AWSPROFILENAME}"
     exit $?
     ;;
   iam-1)

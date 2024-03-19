@@ -1,0 +1,27 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+        "Sid": "DynamoDBGeneralOperations",
+        "Effect": "Allow",
+        "Action": [
+            "dynamodb:CreateTable",
+            "dynamodb:DeleteTable",
+            "dynamodb:UpdateTable",
+            "dynamodb:DescribeTable",
+            "dynamodb:ListTables",
+            "dynamodb:GetItem",
+            "dynamodb:PutItem",
+            "dynamodb:UpdateItem",
+            "dynamodb:DeleteItem",
+            "dynamodb:BatchGetItem",
+            "dynamodb:BatchWriteItem",
+            "dynamodb:Query",
+            "dynamodb:Scan",
+            "dynamodb:DescribeContinuousBackups",
+            "dynamodb:DescribeTimeToLive"
+        ],
+        "Resource": "*"
+        }
+    ]
+}
