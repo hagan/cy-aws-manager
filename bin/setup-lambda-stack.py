@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+## requires:
+# python 3.11 !!
+# zip
+#
 import argparse
 import json
 import os
@@ -8,12 +13,14 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib  ## install this
 
 from subprocess import CalledProcessError
 
 """
 A minimal aws cli toolchain to setup/configure lambda stack without boto3
+Note: Boto3 might be easier to do most of this, but assuming aws cli tools might be easier for end user.
 """
 
 pp = pprint.PrettyPrinter(indent=4)
@@ -165,19 +172,21 @@ def query_policy(policy_name: str = None, profile: str = 'default') -> str:
         return json.loads(result.stdout)
 
 
-def get_role(profile: str = 'default', role_name: str = None) -> str:
+def get_role(profile: str = None, region: str = None, role_name: str = None) -> str:
     """
     Get role if exists
     """
     if role_name is None:
         return
+
+    cmd_line = ["aws", "iam", "get-role", "--role-name", role_name]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
+
     try:
-        result = subprocess.run(
-            [
-                "aws", "iam", "get-role", "--role-name", role_name, "--profile",
-                profile
-            ], capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
     except CalledProcessError as e:
         if 'NoSuchEntity' in e.stderr:
             return {}
@@ -194,21 +203,31 @@ def get_role(profile: str = 'default', role_name: str = None) -> str:
             return datadict['Role']['RoleName']
 
 
-def create_role(profile: str = 'default', role_name: str = None, policy_doc: dict = {}) -> str:
+def create_iam_role(
+    config: dict, profile: str = None, region: str = None,
+    role_name: str = None, ass_policy_doc: dict = {}
+) -> str:
     """
     Create a role from a policy doc
     """
-    if role_name is None:
+    print(f"create_iam_role(profile={profile}, region={region})")
+    if not role_name:
         return None
+
+    cmd_line = [
+        "aws", "iam", "create-role",
+        "--role-name", role_name
+    ]
+    if ass_policy_doc:
+        cmd_line.extend(["--assume-role-policy-document", json.dumps(ass_policy_doc)])
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
+
+
     try:
-        result = subprocess.run(
-            [
-                "aws", "iam", "create-role",
-                "--role-name", role_name,
-                "--assume-role-policy-document", json.dumps(policy_doc),
-                "--profile", profile
-            ], capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
         if result.returncode == 0 and result.stdout:
             print(result.stdout)
         else:
@@ -227,19 +246,20 @@ def create_role(profile: str = 'default', role_name: str = None, policy_doc: dic
             return datadict['Role']['RoleName']
 
 
-def is_s3_bucket(profile: str = 'default', bucket_name: str = None):
+def is_s3_bucket(profile: str = None, region: str = None, bucket_name: str = None):
     """
     Retrieves ARN from aws for s3 bucket?
     """
     if bucket_name is None:
         return
+
+    cmd_line = ["aws", "s3api", "head-bucket", "--bucket", bucket_name]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
     try:
-        result = subprocess.run(
-            [
-                "aws", "s3api", "head-bucket", "--bucket", bucket_name,
-                "--profile", profile
-            ], capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
     except CalledProcessError as e:
         ## weird bug that on occasion raised e even though it returned a result it exists?
         datadict = json.loads(result.stdout)
@@ -255,15 +275,17 @@ def is_s3_bucket(profile: str = 'default', bucket_name: str = None):
         return False
 
 
-def create_s3_bucket(profile: str = 'default', bucket_name: str = None):
+def create_s3_bucket(profile: str = None, region: str = None, bucket_name: str = None):
     if bucket_name is None:
         return
+
+    cmd_line = ["aws", "s3", "mb", f"s3://{bucket_name}"]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
     try:
-        result = subprocess.run(
-            [
-                "aws", "s3", "mb", f"s3://{bucket_name}", "--profile", profile
-            ], capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
     except CalledProcessError as e:
         print("ERROR")
         print(e.stdout)
@@ -291,15 +313,24 @@ def zip_lambda_func(config: dict, profile: str = 'default', temp_dir: str = None
         raise e
 
 
-def is_lambda_func(config: dict, profile: str = 'default', temp_dir: str = None):
+def is_lambda_func(
+    config: dict,
+    profile: str = None,
+    region: str = None,
+    temp_dir: str = None
+):
     # ISLAMBDA=$(aws lambda get-function --function-name $LAMBDA_FUN_NAME "$@" | jq -r -c '.Configuration.FunctionName')
     lambda_fun_name = config['names']['lambda_fun_name']
+    cmd_line = [
+        "aws", "lambda", "get-function", "--function-name",
+        lambda_fun_name
+    ]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
     try:
-        result = subprocess.run(
-            [
-                "aws", "lambda", "get-function", "--function-name", lambda_fun_name, "--profile", profile
-            ], capture_output=True, text=True, check=True,
-        )
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
     except CalledProcessError as e:
         print("ERROR")
         print(e.stdout)
@@ -312,52 +343,86 @@ def is_lambda_func(config: dict, profile: str = 'default', temp_dir: str = None)
             ('FunctionName' in datadict['Configuration']) and
             (datadict['Configuration']['FunctionName'] == lambda_fun_name)
         ):
-
             return True
         return False
 
 
-def update_lambda_func(config: dict, profile: str = 'default', temp_dir: str = None):
+def update_lambda_func(config: dict, profile: str = None, region: str = None, temp_dir: str = None):
     if temp_dir is None:
         return
-    print("updating lamda function")
+    print(f"update_lambda_func(profile={profile}, region={region})")
     lambda_fun_name = config['names']['lambda_fun_name']
+    cmd_line = [
+        "aws", "lambda", "update-function-code", "--function-name",
+        lambda_fun_name, "--zip-file", f"fileb://{temp_dir}/function.zip"
+    ]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
     try:
-        result = subprocess.run(
-            [
-                "aws", "lambda", "update-function-code", "--function-name",
-                lambda_fun_name, "--zip-file", f"fileb://{temp_dir}/function.zip",
-                "--profile", profile
-            ], capture_output=True, text=True, check=True,
-        )
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
     except CalledProcessError as e:
         print("ERROR")
         print(e.stdout)
         print(e.stderr)
         raise e
+    else:
+        time.sleep(1) # changes take a second to settle, for following call -> update_lambda_func_config()
+
+
+def update_lambda_func_config(config:dict, profile: str = None, region: str = None, account_id: str = None):
+
+    print(f"update_lambda_func_config(profile={profile}, region={region}, account_id={account_id}) ")
+    if account_id is None:
+        raise Exception("ERROR: no account_id passed!")
+    lambda_fun_name = config['names']['lambda_fun_name']
+    lambda_assume_role_name = config['names']['lambda_assume_role_name']
+    if not lambda_fun_name or not lambda_assume_role_name:
+        raise Exception("Error: calling update_lambda_func_config() without a configured lambda_fun_name or lambda_assume_role_name!")
+    cmd_line = [
+        "aws", "lambda", "update-function-configuration", "--function-name",
+        lambda_fun_name, "--role", f"arn:aws:iam::{account_id}:role/{lambda_assume_role_name}"
+    ]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
+    try:
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
+    except CalledProcessError as e:
+        print("ERROR")
+        print(e.stdout)
+        print(e.stderr)
+        raise e
+
 
 def create_lambda_func(
         config: dict,
-        profile: str = 'default',
+        profile: str = None,
+        region: str = None,
         temp_dir: str = None,
         account_id: str = None,
-        lambda_role: str = None
+        lambda_assume_role: str = None
     ):
-    if temp_dir is None or account_id is None or lambda_role is None:
+    if temp_dir is None or account_id is None or lambda_assume_role is None:
         return
 
-    #   --runtime python3.11 --role arn:aws:iam::${ACCOUNT_ID}:role/${LAMBDA_ROLE} "$@"
     print("Creating lamda function")
     lambda_fun_name = config['names']['lambda_fun_name']
+    cmd_line =  [
+        "aws", "lambda", "create-function", "--function-name",
+        lambda_fun_name, "--zip-file", f"fileb://{temp_dir}/function.zip",
+        "--handler", "lambda_function.lambda_handler",
+        "--runtime", "python3.11", "--role", f"arn:aws:iam::{account_id}:role/${lambda_assume_role}"
+    ]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
     try:
         result = subprocess.run(
-            [
-                "aws", "lambda", "create-function", "--function-name",
-                lambda_fun_name, "--zip-file", f"fileb://{temp_dir}/function.zip",
-                "--handler", "lambda_function.lambda_handler",
-                "--runtime", "python3.11", "--role", f"arn:aws:iam::{account_id}:role/${lambda_role}"
-                "--profile", profile
-            ], capture_output=True, text=True, check=True,
+           cmd_line, capture_output=True, text=True, check=True
         )
     except CalledProcessError as e:
         print("ERROR")
@@ -366,18 +431,20 @@ def create_lambda_func(
         raise e
 
 
-def create_lambda_policy(config: dict, profile: str = 'default', policy_name: str = None):
+def create_iam_policy(config: dict, profile: str = None, region: str = None, policy_name: str = None):
     """
     Create a policy document for our lambda func and S3
     """
+    cmd_line = [
+        "aws", "iam", "create-policy", "--policy-name", policy_name,
+        "--policy-document", json.dumps(config['json_documents'][policy_name])
+    ]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
     try:
-        result = subprocess.run(
-            [
-                "aws", "iam", "create-policy", "--policy-name", policy_name,
-                "--policy-document", json.dumps(config['json_documents'][policy_name]),
-                "--profile", profile
-            ], capture_output=True, text=True, check=True,
-        )
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
     except CalledProcessError as e:
         print("ERROR")
         print(e.stdout)
@@ -385,52 +452,159 @@ def create_lambda_policy(config: dict, profile: str = 'default', policy_name: st
         raise e
 
 
-def main(config:dict, profile:str = None):
+def update_iam_assume_role(config: dict, profile: str = None, region: str = None, role_name: str = None, policy_doc: dict = None):
+    """
+    If our policy already exists, update!
+    """
+    print(f"update_iam_assume_role(profile={profile}, region={region}, role_name={role_name})")
+    if not role_name or not policy_doc:
+        raise Exception("Error: Cannot call update_iam_assume_role() without role_name and policy_doc defined!")
+
+    cmd_line = [
+        "aws", "iam", "update-assume-role-policy", "--role-name", role_name,
+        "--policy-document", json.dumps(policy_doc)
+    ]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
+    try:
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
+    except CalledProcessError as e:
+        print("ERROR")
+        print(e.stdout)
+        print(e.stderr)
+        raise e
+    else:
+        if result.stdout:
+            return json.loads(result.stdout)
+        return {}
+
+
+def list_iam_attach_policies(config: dict, profile: str = None, region: str = None, role_name: str = None):
+    """
+    Returns list of attached policies
+    """
+    if not role_name:
+        raise Exception("Error: list_iam_attach_policies() called without a role_name defined!")
+    cmd_line = [
+        "aws", "iam", "list-attached-role-policies", "--role-name", role_name
+    ]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
+    try:
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
+    except CalledProcessError as e:
+        print("ERROR")
+        print(e.stdout)
+        print(e.stderr)
+        raise e
+    else:
+        return json.loads(result.stdout)
+
+
+def attach_iam_policy(config: dict, profile: str = None, region: str = None, role_name: str = None, policy_arn: str = None):
+    """
+    Attach a policy to a role
+    """
+    print(f"attach_iam_policy(role_name={role_name}, policy_name={policy_arn})")
+    if role_name is None or policy_arn is None:
+        raise Exception("Error: calling attach_iam_policy() without role_name or policy_arn!")
+    cmd_line = [
+        "aws", "iam", "attach-role-policy", "--role-name", role_name,
+        "--policy-arn", policy_arn
+    ]
+    if profile is not None:
+        cmd_line.extend(["--profile", profile])
+    if region is not None:
+        cmd_line.extend(['--region', region])
+    try:
+        result = subprocess.run(cmd_line, capture_output=True, text=True, check=True)
+    except CalledProcessError as e:
+        print("ERROR")
+        print(e.stdout)
+        print(e.stderr)
+        raise e
+    else:
+        if result.stdout:
+            return json.loads(result.stdout)
+        return {}
+
+
+def main(config: dict, profile: str = None, region: str = None):
     # create a local tmp directory
     path = pathlib.Path(config['paths']['tmp_dir'])
     path.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(dir=config['paths']['tmp_dir']) as temp_dir:
         print(f"Temporary directory created at: {temp_dir}")
-
         account_id = get_account_id(profile=profile)
         print(f"account_id: {account_id}")
+        # lambda_assume_role = config['names']['lambda_assume_role_name']
+        # assume_policy_doc = config['json_documents']['lambda_assume_role_policy_doc']
 
-        print(f"Fetching role {config['names']['lambda_role']} from aws")
-        lambda_role = get_role(profile=profile, role_name=config['names']['lambda_role'])
-        if lambda_role:
-            print(f"Role '{config['names']['lambda_role']}' exists.")
-        else:
-            lambda_role = create_role(
-                profile=profile,
-                role_name=config['names']['lambda_role'],
-                policy_doc=config['json_documents']['lambda_policy_doc']
-            )
-            pp.pprint(lambda_role)
+        # print(f"Fetching role {lambda_assume_role} from aws")
+        # ret_lambda_assume_role = get_role(profile=profile, role_name=lambda_assume_role)
+        # if ret_lambda_assume_role:
+        #     print(f"Role '{ret_lambda_assume_role}' exists.")
+        #     ## Need to update the policy document for the "assume role" lambda role
+        #     ret_val = update_iam_assume_role(
+        #         config, profile=profile, region=region,
+        #         role_name=lambda_assume_role,
+        #         policy_doc=assume_policy_doc
+        #     )
+        #     pp.pprint(ret_val)
+        # else:
+        #     lambda_assume_role = create_iam_role(
+        #         config, profile=profile, region=region, role_name=lambda_assume_role,
+        #         ass_policy_doc=assume_policy_doc
+        #     )
+        #     pp.pprint(lambda_assume_role)
 
-        # Create S3 bucket to stash results into
-        bucket_name = config['names']['s3_bucket_name']
-        print(is_s3_bucket(profile=profile, bucket_name=bucket_name))
-        if(not is_s3_bucket(profile=profile, bucket_name=bucket_name)):
-            create_s3_bucket(profile=profile, bucket_name=bucket_name)
-        else:
-            print(f"Yes, {bucket_name} bucket exists!")
+        # # Create S3 bucket to stash results into
+        # bucket_name = config['names']['s3_bucket_name']
+        # print(is_s3_bucket(profile=profile, bucket_name=bucket_name))
+        # if(not is_s3_bucket(profile=profile, bucket_name=bucket_name)):
+        #     create_s3_bucket(profile=profile, region=region, bucket_name=bucket_name)
+        # else:
+        #     print(f"Yes, {bucket_name} bucket exists!")
 
-        zip_lambda_func(config, profile=profile, temp_dir=temp_dir)
-        if not os.path.exists(f"{temp_dir}/function.zip"):
-            print("ERROR: couldn't zip function up!")
-            sys.exit(1)
+        # zip_lambda_func(config, profile=profile, temp_dir=temp_dir)
+        # if not os.path.exists(f"{temp_dir}/function.zip"):
+        #     print("ERROR: couldn't zip function up!")
+        #     sys.exit(1)
 
-        if(not is_lambda_func(config, profile=profile, temp_dir=temp_dir)):
-            create_lambda_func(config, profile=profile, temp_dir=temp_dir, account_id=account_id, lambda_role=lambda_role)
-        else:
-            update_lambda_func(config, profile=profile, temp_dir=temp_dir)
+        # if(not is_lambda_func(config, profile=profile, region=region, temp_dir=temp_dir)):
+        #     create_lambda_func(config, profile=profile, region=region, temp_dir=temp_dir, account_id=account_id, lambda_assume_role=lambda_assume_role)
+        # else:
+        #     update_lambda_func(config, profile=profile, region=region, temp_dir=temp_dir)
+        #     update_lambda_func_config(config, profile=profile, region=region, account_id=account_id)
 
-        matching_pols = query_policy(policy_name='cy-awsmgr-allow-lambda-s3', profile=profile)
-        if any(['PolicyName' in x for x in matching_pols]):
-            print("Policy exists")
-        else:
-            create_lambda_policy(config, profile=profile, policy_name='cy-awsmgr-allow-lambda-s3')
+        # lbpn = config['names']['lambda_bucket_pol_name']
+        # matching_pols = query_policy(policy_name=lbpn, profile=profile)
+        # pp.pprint(matching_pols)
+        # if any(['PolicyName' in x for x in matching_pols]):
+        #     print("Policy already exists!")
+        # else:
+        #     create_iam_policy(config, profile=profile, policy_name=lbpn)
+
+        # attached_pols = list_iam_attach_policies(config, profile=profile, region=region, role_name=lambda_assume_role)
+        # if(
+        #     ('AttachedPolicies' in attached_pols) and
+        #     (any([x['PolicyName'] == lbpn for x in attached_pols['AttachedPolicies'] if 'PolicyName' in x]))
+        # ):
+        #     print(f"{lbpn} is already attached to lambda assume role {lambda_assume_role}!")
+        # else:
+        #     # aws iam attach-role-policy --role-name MyLambdaExecutionRole --policy-arn arn:aws:iam::123456789012:policy/LambdaS3WriteAccess
+        #     ret_val = attach_iam_policy(
+        #         config, profile=profile, region=region,
+        #         role_name=lambda_assume_role,
+        #         policy_arn=f"arn:aws:iam::{account_id}:policy/{lbpn}"
+        #     )
+
+        ## Setup Gateway
 
 
 if __name__=="__main__":
@@ -443,6 +617,10 @@ if __name__=="__main__":
         '--profile', metavar='name', required=False, default=None,
         help='The AWS profile used to execute cli commands'
     )
+    parser.add_argument(
+        '--region', metavar='region', required=False, default=None,
+        help='The AWS region used to execute cli commands'
+    )
     args = parser.parse_args()
     config = load_config(config_file_path=args.config_path)
     if((args.profile is None) and ('awsprofile' in config['general'])):
@@ -450,6 +628,13 @@ if __name__=="__main__":
     elif((args.profile is None) and ('awsprofile' not in config['general'])):
         parser.print_help()
         print("\nError: No default profile, use --profile <name>")
+        sys.exit(1)
     else:
         profile = args.profile
-    main(config, profile=profile)
+    if((args.region is None) and ('awsregion' in config['general'])):
+        region = config['general']['awsregion']
+    elif((args.region is None) and ('awsregion' not in config['general'])):
+        parser.print_help()
+        print("\nError: No default region, use --region <name>")
+        sys.exit(1)
+    main(config, profile=profile, region=region)
