@@ -541,21 +541,33 @@ if __name__=="__main__":
         ast = ActiveState(args.config_path)
     else:
         ast = ActiveState(bin_path / 'cyawsmgr_config.ini')
-    if((args.profile is None) and ast.dm.general.awsprofile):
-        profile = ast.dm.general.awsprofile
-    elif((args.profile is None) and (not ast.dm.general.awsprofile)):
+    if((args.profile is None) and 'awsprofile' in ast.dm.general) and ast.dm.general['awsprofile']:
+        profile = ast.dm.general['awsprofile']
+    elif('AWS_PROFILE' in os.environ):
+        profile = os.environ.get('AWS_PROFILE', None)
+        ast.dm.general.awsprofile = profile
+    else:
+        profile = args.profile
+        ast.dm.general.awsprofile = profile
+
+    if(profile is None):
         parser.print_help()
         print("\nError: No default profile, use --profile <name>")
         sys.exit(1)
+
+    if((args.region is None) and 'awsregion' in ast.dm.general) and ast.dm.general['awsregion']:
+        region = ast.dm.general['awsregion']
+    elif('AWS_REGION' in os.environ):
+        region = os.environ.get('AWS_REGION', None)
+        ast.dm.general.awsregion = region
     else:
-        profile = args.profile
-    if((args.region is None) and ast.dm.general.awsregion):
-        region = ast.dm.general.awsregion
-    elif((args.region is None) and (not ast.dm.general.awsregion)):
+        region = args.region
+        ast.dm.general.awsregion = region
+
+    if(region is None):
         ## TODO Use environment?
         parser.print_help()
         print("\nError: No default region, use --region <name>")
         sys.exit(1)
-    else:
-        region = args.region
+
     main(ast, args)
