@@ -54,12 +54,13 @@ And you do not need to run `git lfs install` as hooks are already in .git/hook o
 
 To add a file:
 
-`$> ` 
+`$> `
 
 ## Compiling docker images
 
 #### Setup our builder environment
 
+  docker run -d -p 5000:5000 --name registry registry:latest
   docker buildx create --name mybuilder --use
   docker buildx inspect --bootstrap
   docker login

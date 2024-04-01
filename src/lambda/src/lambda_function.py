@@ -1,13 +1,19 @@
 import boto3
 import os
+import logging
 
 from datetime import datetime
 
-def lambda_handler(event, context):
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
+def handler(event, context):
+    logger.info("handler.handler() called!")
     # Define the bucket name and file name
     bucket_name = 'cy-awsmgr-bucket'
     file_name = 'timestamp.txt'
-
     # Create an S3 client
     s3 = boto3.client('s3')
 

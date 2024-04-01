@@ -66,7 +66,7 @@ class ActiveState(object):
         if key not in dm_obj._map:
             dm_obj[key] = DotMap()
 
-    def set_refkey(self, refkey, value):
+    def set_refkey(self, refkey: str, value: str, set_value_if_none: bool = False):
         """
         Sets computed values in "dm" -> render and return from refreshed dm_computed!
         """
@@ -74,6 +74,10 @@ class ActiveState(object):
             raise Exception("Error: refkey must be a valid string")
         if refkey.count('.') != 1:
             raise Exception("Error: Refkey must be of the form <section>.<subsection>")
+
+        if value is None and not set_value_if_none:
+            return
+
         (section, subkey) = refkey.split('.')
         self._create_new_sub_dotmap(self.dm, section)
         self.dm[section][subkey] = value
@@ -87,10 +91,10 @@ class ActiveState(object):
             raise Exception("Error: Refkey must be of the form <section>.<subsection>")
         (section, subkey) = refkey.split('.')
         if section in self.dm_computed.keys() and subkey in self.dm_computed[section].keys():
-            print(f"Gettin computed from {section}.{subkey}?")
+            # print(f"Gettin computed from {section}.{subkey}?")
             return self.dm_computed[section][subkey]
         elif section in self.dm.keys() and subkey in self.dm[section].keys():
-            print(f"Getting stale from {section}.{subkey}")
+            # print(f"Getting stale from {section}.{subkey}")
             return self.dm[section][subkey]
         return default
 
@@ -140,7 +144,7 @@ class ActiveState(object):
         var_keys = list(unresolved.keys())
         for vname in var_keys:
             currentval =  unresolved[vname] if vname in unresolved else None
-            newval = ActiveState.resolve_tokens(currentval, unresolved, resolved=resolved, token_pattern=token_pattern, debug=debug)
+            newval = ActiveState.resolve_tokens(currentval, unresolved, resolved=resolved, token_pattern=token_pattern, debug=debug, tracking_key=vname)
             if(
                 (not contains_token(newval, token_pattern=token_pattern)) or
                 ((vname in keycounter)) and (keycounter[vname] >= TOKEN_EXPANSION_LIMIT)
@@ -153,18 +157,18 @@ class ActiveState(object):
         return ActiveState.expand_variables(resolved=resolved, unresolved=unresolved, keycounter=keycounter, token_pattern=token_pattern, debug=debug, norecurse=norecurse, depth=depth+1)
 
     @staticmethod
-    def resolve_tokens(element:[dict|list|str|int], unresolved: dict, resolved: dict = {}, token_pattern: str = DEFAULT_TOKEN_PATTERN, debug: bool = False):
+    def resolve_tokens(element:[dict|list|str|int], unresolved: dict, resolved: dict = {}, token_pattern: str = DEFAULT_TOKEN_PATTERN, debug: bool = False, tracking_key: str = None):
         """
         """
         # breakdown dictionary into elements, reassemble and return
         if isinstance(element, dict):
-            return {key: ActiveState.resolve_tokens(value, unresolved, resolved=resolved, token_pattern=token_pattern, debug=debug) for key, value in element.items()}
+            return {key: ActiveState.resolve_tokens(value, unresolved, resolved=resolved, token_pattern=token_pattern, debug=debug, tracking_key=f'{tracking_key}.{key}') for key, value in element.items()}
         # breakdown list into elements, reassemble and return
         elif isinstance(element, list):
-            return [ActiveState.resolve_tokens(value, unresolved, resolved=resolved, token_pattern=token_pattern, debug=debug) for value in element]
+            return [ActiveState.resolve_tokens(value, unresolved, resolved=resolved, token_pattern=token_pattern, debug=debug, tracking_key=tracking_key) for value in element]
         # breakdown tuble into elements, reassemble
         elif isinstance(element, tuple):
-            return tuple([ActiveState.resolve_tokens(value, unresolved, resolved=resolved, token_pattern=token_pattern, debug=debug) for value in element])
+            return tuple([ActiveState.resolve_tokens(value, unresolved, resolved=resolved, token_pattern=token_pattern, debug=debug, tracking_key=tracking_key) for value in element])
         elif isinstance(element, int):
             return element
         elif isinstance(element, str):
@@ -191,7 +195,8 @@ class ActiveState(object):
                     print(f"returning this: -> {element}")
                 return element
         else:
-            print(f"WARNING: {type(element)} type is not yet supported!")
+            source_element = f" from '{tracking_key}'" if tracking_key is not None else ''
+            print(f"WARNING: {type(element)} type {source_element} is not yet supported!")
 
         return element
 
@@ -212,12 +217,12 @@ def has_token_recursive(item: [dict|list|str|int], token_pattern: str = DEFAULT_
         dict_bool_map = list(map(lambda x: has_token_recursive(x, token_pattern=token_pattern), [ v for idict in item if isinstance(idict, dict) for v in idict.values()]))
         list_bool_map = list(map(lambda x: has_token_recursive(x, token_pattern=token_pattern), [ ilist for ilist in item if isinstance(ilist, list)]))
         return flatten(str_bool_map + dict_bool_map + list_bool_map)
+    elif isinstance(item, tuple):
+        raise Exception("Unsupported type 'tuple', cannot process!")
     elif isinstance(item, str):
         return [bool(re.match(token_pattern, item))]
-    elif isinstance(item, int):
-        return [False]
     else:
-        raise Exception(f"Error input type {type(item)} is unsupported")
+        return [False]
 
 
 def contains_token(item: [dict|list|str|int], token_pattern=DEFAULT_TOKEN_PATTERN) -> bool:

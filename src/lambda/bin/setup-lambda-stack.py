@@ -10,13 +10,17 @@ import os
 import pathlib
 import pprint
 import re
+import jwt
+import datetime
+import secrets
 
 import subprocess
 import sys
 import tempfile
 import time
 import jmespath
-
+import logging
+import zipfile
 
 from subprocess import CalledProcessError
 from collections import namedtuple
@@ -25,6 +29,8 @@ from dotmap import DotMap
 
 from pylib.utils import ActiveState
 
+from colorama import init, Fore, Style
+
 """
 A minimal aws cli toolchain to setup/configure lambda stack without boto3
 Note: Boto3 might be easier to do most of this, but assuming aws cli tools might be easier for end user.
@@ -32,40 +38,64 @@ Note: Boto3 might be easier to do most of this, but assuming aws cli tools might
 
 pp = pprint.PrettyPrinter(indent=4)
 bin_path = Path(__file__).absolute().parent
+init(autoreset=True)
+logging.basicConfig(
+    filename='setup-lambda-stack.log',
+    filemode='a',
+    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+    datefmt='%H:%M:%S',
+    level=logging.DEBUG
+)
+logger = logging.getLogger('awshackylambda')
 
 
 class CommandExeception(CalledProcessError):
     pass
 
 
-def zip_lambda_func(ast: dict):
-    print("Ziping up lambda function")
+def log_msg(message: str, print_msg: bool, start_of_function: bool = True):
+    if print_msg and start_of_function:
+        print(f"{Fore.GREEN}{message}")
+    else:
+        print(message)
+    logger.info(message)
+
+
+def zip_lambda_func(ast: dict, debug: bool = False, stdout: bool = False, info: bool = False):
+    """
+    Generate secret and package lambda function
+    """
+    log_msg(f"zip_lambda_func(path={ast.dm.paths.lambda_func_dir})", info or ast.dm.general.info)
+
     if ast.dm.paths.tmp_dir is None:
         return
 
-    print(f"lambda_dir: {ast.dm.paths.lambda_func}")
-    try:
-        result = subprocess.run(
-            [
-                "zip", f"{ast.dm.paths.tmp_dir}/function.zip", ast.dm.paths.lambda_func
-            ], cwd=ast.dm.paths.lambda_func_dir, capture_output=True, text=True, check=True,
-        )
-    except CalledProcessError as e:
-        print("ERROR")
-        print(e.stdout)
-        print(e.stderr)
-        raise e
+    lambda_code_path = Path(ast.dm.paths.lambda_func_dir)
+    print(f"lambda code path: {lambda_code_path}")
+    files = lambda_code_path.glob('*')
+
+    token = secrets.token_urlsafe(64)
+    with open(f'{ast.dm.paths.lambda_func_dir}/token.txt', 'w') as file:
+        file.write(token)
+
+    ## maybe use a py lib instead?
+    with zipfile.ZipFile(f'{ast.dm.paths.tmp_dir}/function.zip', 'w') as zip_ref:
+        for file in files:
+            print(f"adding {file.name}")
+            zip_ref.write(file, arcname=file.name)
 
 
 def execute_cmd(
         ast: ActiveState, refkey: str = None, debug: bool = False,
-        stdout: bool = False, fake: bool = False,
+        stdout: bool = False, info: bool = False, fake: bool = False,
         skip_load_json: bool = False, output: str = 'json',
         shell = False
     ):
     """
     Given a command structure -> {'cmd': ["echo", "output"], 'value': 'lol'}
     """
+    log_msg(f"execute_cmd(refkey={refkey})", info or ast.dm.general.info)
+
     if refkey is None:
         raise Exception("Error: Must provide a refkey of the form 'section.element' from ini to run")
 
@@ -117,10 +147,10 @@ def execute_cmd(
                 print(elm)
             return {}
     except CalledProcessError as e:
-        print(">>>>ERROR<<<<")
-        print(e.cmd)
-        print(e.stdout)
-        print(e.stderr)
+        logger.error(f"command line: {e.cmd}")
+        logger.error(f"retcode: {e.returncode}")
+        logger.error(e.stdout)
+        logger.error(e.stderr)
         raise CommandExeception(e.returncode, e.cmd, e.stdout, e.stderr)
     else:
         if result.returncode:
@@ -129,10 +159,10 @@ def execute_cmd(
         # ret_string = result.stdout.replace('\n', '').replace('\r', '') if result.stdout is not None else ''
         if result.stdout and not skip_load_json:
             if debug or ast.dm.general.debug or stdout:
-                print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n{result.stdout}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n\n")
+                print(f"{Style.DIM}{result.stdout}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n\n")
+            else:
+                logger.info(result.stdout)
             result_json = json.loads(result.stdout)
-            if debug or ast.dm.general.debug or stdout:
-                pp.pprint(result_json)
         else:
             result_json = {}
 
@@ -142,6 +172,7 @@ def execute_cmd(
                 print(f"working on capture [{i}]")
             if(('dest' not in val) or (not val['dest'])):
                 raise Exception(f"Missing capture element with dest in config element [{i}] in @ ({refkey})!")
+            dest = val['dest'] if 'dest' in val and val['dest'] else 'computed.returned'
             if debug or ast.dm.general.debug:
                 print(f"using query: {val['query']}")
             if 'query' in val and val['query']:
@@ -149,147 +180,213 @@ def execute_cmd(
             else:
                 result_val = result_json
             if debug or ast.dm.general.debug or stdout:
-                print(f"jmespath returned '{json.dumps(result_val)}' from query '{val['query']}'")
+                print(f"{Style.DIM}jmespath returned '{json.dumps(result_val)}' from query '{val['query']}'")
             if result_val:
-                ast.set_refkey(val['dest'], result_val)
-                returnvals[val['dest']] = result_val
+                ast.set_refkey(dest, result_val)
+                returnvals[dest] = result_val
         return returnvals
 
 
-def get_api_account(ast: ActiveState, debug: bool = False):
-    ## GET ACCOUT ID - SETS computed.account_id
-    if debug or ast.dm.general.debug:
-        print(f"get_api_account()")
-    results = execute_cmd(ast, refkey='account_setup.get_account_id', debug=debug)
-    if debug or ast.dm.general.debug:
-        print("execute_cmd returned:")
-        pp.pprint(results)
-    account_id = ast.get_refkey('computed.account_id')
-    if account_id is not None:
-        print(f"account_id: {account_id}")
-    else:
-        print("ERROR: No account id found for this user")
-        sys.exit(1)
-
-
-def get_or_create_iam_lambda_assume_role(ast: ActiveState, debug: bool = False, stdout: bool = False):
-    ## GET OR CREATES AssumeRole for lambda
-    if debug or ast.dm.general.debug:
-        print(f"get_or_create_iam_lambda_assume_role()")
-    create_new_role = False
-    ast.set_refkey('computed.iam_assume_role_policy_doc_string', json.dumps(ast.dm_computed.json_documents.lambda_assume_role_policy_doc.toDict()))
-    print(f"Fetching role {ast.dm_computed.names.lambda_assume_role_name} from aws")
-    try:
-        results = execute_cmd(ast, refkey='lambda_setup.get_lambda_assume_role_01', debug=debug, stdout=stdout)
-    except CommandExeception as e:
-        if re.search('NoSuchEntity', e.stderr):
-            print(f"Lambda Role '{ast.dm_computed.names.lambda_assume_role_name}' not found")
-            create_new_role = True
-        else:
-            raise e
-    if not create_new_role:
-        print(f"Update Role '{results['computed.role_name']}' for lambda function.")
-        results = execute_cmd(ast, refkey='lambda_setup.update_lambda_assume_role_02b', debug=debug, stdout=stdout)
-    else:
-        print(f"Creating Role '{ast.dm_computed.names.lambda_assume_role_name}' for lambda function")
-        results = execute_cmd(ast, refkey='lambda_setup.create_lambda_assume_role_02', debug=debug, stdout=stdout)
-
-
-def get_or_create_s3_bucket(ast: ActiveState, debug: bool = False, stdout: bool = False):
-    ## GET OR CREATE S3 Bucket for Lambda funct
-    print(f"Creating S3 Bucket {ast.dm_computed.names.s3_bucket_name} for Lambda function")
-    create_new_bucket = False
-    try:
-        results = execute_cmd(ast, refkey='lambda_setup.get_s3_bucket_03', debug=debug, stdout=stdout)
-    except CommandExeception as e:
-        if re.search('404', e.stderr):
-            print(f"Bucket {ast.dm_computed.names.s3_bucket_name} not found")
-            create_new_bucket = True
-        else:
-            raise e
-    else:
-        print(f"S3 bucket {ast.dm_computed.names.s3_bucket_name} already exists!")
-    if create_new_bucket:
-        results = execute_cmd(ast, section='lambda_setup.create_s3_bucket_04', debug=debug, stdout=stdout, skip_load_json=True)
-
+def package_lambdas(ast: ActiveState, debug: bool = True, stdout: bool = True):
+    """
+    Zip all lambdas for this deployment
+    """
     zip_lambda_func(ast)
     if not os.path.exists(f"{ast.dm.paths.tmp_dir}/function.zip"):
         print("ERROR: couldn't zip function up!")
         sys.exit(1)
 
 
-def get_or_setup_lambda_fun(ast: ActiveState, debug: bool = False, stdout: bool = False):
+def get_api_account(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    ## GET ACCOUT ID - SETS computed.account_id
+    log_msg("get_api_account()", ast.dm.general.info)
+    results = execute_cmd(ast, refkey='account_setup.get_account_id', debug=debug, stdout=stdout, info=info)
+    if debug or ast.dm.general.debug:
+        info.logging(pp.pformat(results))
+    account_id = ast.get_refkey('computed.account_id')
+    if account_id is not None:
+        print(f"{Style.BRIGHT}{Fore.BLUE}\taccount_id: {account_id}")
+    else:
+        print(f"{Fore.LIGHTRED_EX}ERROR: No account id found for this user")
+        sys.exit(1)
+
+
+def get_or_create_iam_lambda_assume_role(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    ## GET OR CREATES AssumeRole for lambda
+    log_msg("get_or_create_iam_lambda_assume_role()", info or ast.dm.general.info)
+    create_new_role = False
+    ast.set_refkey('computed.iam_assume_role_policy_doc_string', json.dumps(ast.dm_computed.json_documents.lambda_assume_role_policy_doc.toDict()))
+    print(f"\tFetching role {ast.dm_computed.names.lambda_assume_role_name} from aws")
+    try:
+        results = execute_cmd(ast, refkey='lambda_setup.get_lambda_assume_role_01', debug=debug, stdout=stdout, info=info)
+    except CommandExeception as e:
+        if re.search('NoSuchEntity', e.stderr):
+            print(f"{Fore.YELLOW}Lambda Role '{ast.dm_computed.names.lambda_assume_role_name}' not found")
+            create_new_role = True
+        else:
+            raise e
+    if not create_new_role:
+        print(f"\tUpdate Role '{results['computed.role_name']}' for lambda function.")
+        results = execute_cmd(ast, refkey='lambda_setup.update_lambda_assume_role_02b', debug=debug, stdout=stdout, info=info)
+    else:
+        print(f"\tCreating Role '{ast.dm_computed.names.lambda_assume_role_name}' for lambda function")
+        results = execute_cmd(ast, refkey='lambda_setup.create_lambda_assume_role_02', debug=debug, stdout=stdout, info=info)
+    time.sleep(5)  #takes time for this to propigate?
+
+
+def get_or_create_s3_bucket(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    ## GET OR CREATE S3 Bucket for Lambda funct
+    dmcmp = ast.dm_computed
+    log_msg("get_or_create_s3_bucket()", info or ast.dm.general.info)
+    print(f"\tCreating S3 Bucket {dmcmp.names.s3_bucket_name} for Lambda function")
+    create_new_bucket = False
+    try:
+        results = execute_cmd(ast, refkey='lambda_setup.get_s3_bucket_03', debug=debug, stdout=stdout, info=info)
+    except CommandExeception as e:
+        if re.search('404', e.stderr):
+            print(f"{Fore.YELLOW}Bucket {dmcmp.names.s3_bucket_name} not found")
+            create_new_bucket = True
+        else:
+            raise e
+    else:
+        print(f"\tS3 bucket {dmcmp.names.s3_bucket_name} already exists!")
+    if create_new_bucket:
+        results = execute_cmd(ast, section='lambda_setup.create_s3_bucket_04', debug=debug, stdout=stdout, info=info, skip_load_json=True)
+
+
+def get_or_setup_lambda_fun(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    dmcmp = ast.dm_computed
+    log_msg("get_or_setup_lambda_fun()", info or ast.dm.general.info)
     create_new_lambda_func = False
     try:
-        results = execute_cmd(ast, refkey='lambda_setup.get_lambda_func_05', debug=debug, stdout=stdout)
+        results = execute_cmd(ast, refkey='lambda_setup.get_lambda_func_05', debug=debug, stdout=stdout, info=info)
     except CommandExeception as e:
         if re.search('ResourceNotFoundException', e.stderr):
-            print(f"Function {ast.dm_computed.names.lambda_fun_name} not found!")
+            print(f"Function {dmcmp.names.lambda_fun_name} not found!")
             create_new_lambda_func = True
 
     ## Create Lambda function
     if(create_new_lambda_func):
-        results = execute_cmd(ast, refkey='lambda_setup.create_lambda_func_06', debug=debug, stdout=stdout)
+        ## NOTE: if you get an error "The role defined for the function cannot be assumed by Lambda."
+        ## this might be down to time for the role to propigate to lambda from IAM
+        results = execute_cmd(ast, refkey='lambda_setup.create_lambda_func_06', debug=debug, stdout=stdout, info=info)
         if (('computed.lambda_name' in results) and results['computed.lambda_name']):
-            print(f"Lambda function '{results['computed.lambda_name']}' created!")
+            print(f"\tLambda function '{results['computed.lambda_name']}' created!")
         else:
-            print(f"ERROR: Could not create lambda function '{results['computed.lambda_name']}'")
+            print(f"{Fore.RED}ERROR: Could not create lambda function '{results['computed.lambda_name']}'")
             sys.exit(1)
     else:
-        print(f"Lambda function \"{results['computed.lambda_name']}\" already exists (UPDATING)")
+        print(f"\tLambda function \"{results['computed.lambda_name']}\" already exists (UPDATING)")
         results = execute_cmd(ast, refkey='lambda_setup.update_lambda_func_06b', debug=debug, stdout=stdout)
         if (('computed.lambda_name' not in results) or not results['computed.lambda_name']):
-            print(f"ERROR: Could not update lambda function {ast.dm_computed.names.lambda_fun_name}!")
+            print(f"{Fore.RED}ERROR: Could not update lambda function {dmcmp.names.lambda_fun_name}!")
             sys.exit(1)
         time.sleep(1)
         results = execute_cmd(ast, refkey='lambda_setup.update_lambda_func_cfg_06c', debug=debug, stdout=stdout)
         if (('computed.lambda_name' not in results) or not results['computed.lambda_name']):
-            print(f"ERROR: Could not update lambda function config {ast.dm_computed.names.lambda_fun_name}!")
+            print(f"{Fore.RED}: Could not update lambda function config {dmcmp.names.lambda_fun_name}!")
             sys.exit(1)
 
 
-def setup_iam_bucket_policy(ast: ActiveState, debug: bool = False, stdout: bool = False):
+def get_or_create_authorizer_fun(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    """
+    Add the Authorizer Lambda function!
+    """
+    dmcmp = ast.dm_computed
+    log_msg("get_or_create_authorizer_fun()", info or ast.dm.general.info)
+    create_new_auth_func = False
+    try:
+        results = execute_cmd(ast, refkey='lambda_setup.get_lambda_auth_fun', debug=debug, stdout=stdout, info=info)
+    except CommandExeception as e:
+        if re.search('ResourceNotFoundException', e.stderr):
+            print(f"Function {dmcmp.names.lambda_auth_fun_name} not found!")
+            create_new_auth_func = True
+    ## Create Lambda function
+    if(create_new_auth_func):
+        results = execute_cmd(ast, refkey='lambda_setup.create_lambda_authorizer', debug=debug, stdout=stdout, info=info)
+        pp.pprint(results)
+        if (('computed.returned' in results) and results['computed.returned']):
+            print(f"\tLambda function '{results['computed.returned']}' created!")
+        else:
+            print(f"{Fore.RED}ERROR: Could not create lambda authorizer function '{dmcmp.names.lambda_auth_fun_name}'")
+            sys.exit(1)
+    else:
+        print(f"\tLambda authorizer function \"{dmcmp.names.lambda_auth_fun_name}\" already exists (UPDATING)")
+        results = execute_cmd(ast, refkey='lambda_setup.update_lambda_auth_func', debug=debug, stdout=stdout)
+        if (('computed.returned' not in results) or not results['computed.returned']):
+            print(f"{Fore.RED}ERROR: Could not update lambda function {dmcmp.names.lambda_auth_fun_name}!")
+            sys.exit(1)
+        time.sleep(1)
+        results = execute_cmd(ast, refkey='lambda_setup.update_lambda_auth_func_cfg', debug=debug, stdout=stdout)
+        if (('computed.returned' not in results) or not results['computed.returned']):
+            print(f"{Fore.RED}: Could not update lambda auth function config {dmcmp.names.lambda_auth_fun_name}!")
+            sys.exit(1)
+
+
+def setup_iam_bucket_policy(
+        ast: ActiveState,
+        debug: bool = False,
+        stdout: bool = False,
+        info: bool = False
+    ):
     """
     Setup the S3 Bucket policy for lambda role
     """
-    if debug or ast.dm.general.debug:
-        print(f"setup_lambda_assume_role_policy()")
+    dmcmp = ast.dm_computed
+    log_msg("setup_iam_bucket_policy()", info or ast.dm.general.info)
     ## Setup IAM policy
-    ast.set_refkey('computed.iam_bucket_policy_doc_string', json.dumps(ast.dm_computed.json_documents.cy_awsmgr_bucket_policy_doc.toDict()))
+    ast.set_refkey(
+        'computed.iam_bucket_policy_doc_string',
+        json.dumps(dmcmp.json_documents.cy_awsmgr_bucket_policy_doc.toDict())
+    )
     # @TODO: Fix this weird bug with aws cli not working without shell here?!?
-    results = execute_cmd(ast, refkey='lambda_setup.query_lambda_iam_policy_06d', debug=debug, stdout=stdout, shell=True)
+    results = execute_cmd(ast, refkey='lambda_setup.query_lambda_iam_policy_06d', debug=debug, stdout=stdout, info=info, shell=True)
     if (('computed.policy_s3_name' not in results) or not results['computed.policy_s3_name']):
-        print(f"Creating policy '{ast.dm_computed.names.lambda_bucket_pol_name}' for lambda")
-        results = execute_cmd(ast, refkey='lambda_setup.create_lambda_iam_policy_06e', debug=debug, stdout=stdout)
+        print(f"\tCreating policy '{dmcmp.names.lambda_bucket_pol_name}' for lambda")
+        results = execute_cmd(ast, refkey='lambda_setup.create_lambda_iam_policy_06e', debug=debug, stdout=stdout, info=info)
         if (('computed.policy_s3_name' not in results) or not results['computed.policy_s3_name']):
-            print(f"ERROR: Issue creating iam policy '{ast.dm_computed.names.lambda_bucket_pol_name}' for '{ast.dm_computed.names.lambda_fun_name}' lambda function!")
+            print(f"{Fore.RED}ERROR: Issue creating iam policy '{dmcmp.names.lambda_bucket_pol_name}' for '{dmcmp.names.lambda_fun_name}' lambda function!")
             sys.exit(1)
     else:
-        print(f"Lambda function S3 Bucket IAM Policy '{ast.dm_computed.names.lambda_bucket_pol_name}' already exists!")
+        print(f"\tLambda function S3 Bucket IAM Policy '{dmcmp.names.lambda_bucket_pol_name}' already exists!")
 
 
-def setup_iam_logging_policy(ast: ActiveState, debug: bool = False, stdout: bool = False):
+def setup_iam_logging_policy(
+        ast: ActiveState,
+        debug: bool = False,
+        stdout: bool = False,
+        info: bool = False
+    ):
     """
     Setup the logging policy for Lambda role
     """
+    dmcmp = ast.dm_computed
+    log_msg("setup_iam_logging_policy()", info or ast.dm.general.info)
     ast.set_refkey('computed.iam_logging_policy_doc_string', json.dumps(ast.dm_computed.json_documents.cy_awsmgr_loggroup_policy_doc.toDict()))
     # @TODO: Fix this weird bug with aws cli not working without shell here?!?
     results = execute_cmd(ast, refkey='lambda_setup.query_lambda_iam_policy_06f', debug=False, stdout=False, shell=True)
     if (('computed.policy_log_name' not in results) or not results['computed.policy_log_name']):
-        print(f"Creating policy '{ast.dm_computed.names.lambda_log_pol_name}' for lambda")
+        print(f"\tCreating policy '{ast.dm_computed.names.lambda_log_pol_name}' for lambda")
         results = execute_cmd(ast, refkey='lambda_setup.create_lambda_iam_policy_06g', debug=False, stdout=False)
         if (('computed.policy_log_name' not in results) or not results['computed.policy_log_name']):
-            print(f"ERROR: Issue creating iam policy '{ast.dm_computed.names.lambda_log_pol_name}' for '{ast.dm_computed.names.lambda_fun_name}' lambda function!")
+            print(f"{Fore.RED}ERROR: Issue creating iam policy '{ast.dm_computed.names.lambda_log_pol_name}' for '{ast.dm_computed.names.lambda_fun_name}' lambda function!")
             sys.exit(1)
     else:
-            print(f"Lambda function Log Bucket IAM Policy '{ast.dm_computed.names.lambda_log_pol_name}' already exists!")
+            print(f"\tLambda function Log Bucket IAM Policy '{ast.dm_computed.names.lambda_log_pol_name}' already exists!")
 
 
-def attach_policies_to_lambda_role(ast: ActiveState, debug: bool = False, stdout: bool = False):
-    results = execute_cmd(ast, refkey='lambda_setup.list_lambda_attached_policies', debug=debug, stdout=stdout)
-    larn = ast.dm_computed.names.lambda_assume_role_name
-    lbpm = ast.dm_computed.names.lambda_bucket_pol_name
-    llpn = ast.dm_computed.names.lambda_log_pol_name
+def attach_policies_to_lambda_role(
+        ast: ActiveState,
+        debug: bool = False,
+        stdout: bool = False,
+        info: bool = False
+    ):
+    dmcmp = ast.dm_computed
+    log_msg("attach_policies_to_lambda_role()", info or ast.dm.general.info)
+    results = execute_cmd(ast, refkey='lambda_setup.list_lambda_attached_policies', debug=debug, stdout=stdout, info=info)
+    larn = dmcmp.names.lambda_assume_role_name
+    lbpm = dmcmp.names.lambda_bucket_pol_name
+    llpn = dmcmp.names.lambda_log_pol_name
     if results and 'computed.attached_polices' in results:
         attached_pols = results['computed.attached_polices']
         lbpm_attached = jmespath.search(f"[?PolicyName=='{lbpm}'].PolicyName|[0]", attached_pols)
@@ -299,53 +396,55 @@ def attach_policies_to_lambda_role(ast: ActiveState, debug: bool = False, stdout
         llpn_attached = False
 
     if not lbpm_attached:
-        print(f"Attaching IAM policy '{lbpm}' to role '{larn}'")
-        results = execute_cmd(ast, refkey='lambda_setup.attach_iam_lambda_role_policy_7a', debug=debug, stdout=stdout)
+        print(f"\tAttaching IAM policy '{lbpm}' to role '{larn}'")
+        results = execute_cmd(ast, refkey='lambda_setup.attach_iam_lambda_role_policy_7a', debug=debug, stdout=stdout, info=info)
     else:
-        print(f"""IAM Policy '{lbpm}' is already attached to lambda role '{larn}'!""")
+        print(f"""\tIAM Policy '{lbpm}' is already attached to lambda role '{larn}'!""")
 
     if not llpn_attached:
-        print(f"Attaching IAM policy '{llpn}' to role '{larn}'")
-        results = execute_cmd(ast, refkey='lambda_setup.attach_iam_lambda_role_policy_7b', debug=debug, stdout=stdout)
+        print(f"\tAttaching IAM policy '{llpn}' to role '{larn}'")
+        results = execute_cmd(ast, refkey='lambda_setup.attach_iam_lambda_role_policy_7b', debug=debug, stdout=stdout, info=info)
     else:
-        print(f"""IAM Policy '{llpn}' is already attached to lambda role '{larn}'!""")
+        print(f"""\tIAM Policy '{llpn}' is already attached to lambda role '{larn}'!""")
 
 
-def set_lambda_arn(ast: ActiveState, debug: bool = False, stdout: bool = False):
+def set_lambda_arn(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
     ## Get Lambda ARN - SETS computed.lambda_arn
+    dmcmp = ast.dm_computed
+    log_msg("set_lambda_arn()", info or ast.dm.general.info)
     # @TODO: Fix this weird bug with aws cli not working without shell here?!?
-    results = execute_cmd(ast, refkey='lambda_setup.get_lambda_arn_01', debug=debug, stdout=stdout, shell=True)
+    results = execute_cmd(ast, refkey='lambda_setup.get_lambda_arn_01', debug=debug, stdout=stdout, info=info, shell=True)
     if results and 'computed.returned' in results:
         arns = results['computed.returned']
         if len(arns) == 1:
             lambda_arn = arns[0]
-            print(f"Lambda ({ast.dm_computed.names.lambda_fun_name}) arn : {lambda_arn}")
+            print(f"\tLambda ({dmcmp.names.lambda_fun_name}) arn : {lambda_arn}")
             ast.set_refkey('computed.lambda_arn', lambda_arn)
         else:
-            print(f"ERROR: Could not find arn for Lambda {ast.dm_computed.names.lambda_fun_name}")
+            print(f"{Fore.RED}ERROR: Could not find arn for Lambda {dmcmp.names.lambda_fun_name}")
             sys.exit(1)
 
 
-def setup_gateway(ast: ActiveState, debug: bool = False, stdout: bool = False):
-    if debug or ast.dm.general.debug:
-        print(f"setup_gateway(gateway_name = {ast.dm_computed.names.api_gateway_name})")
+def setup_gateway(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    dmcmp = ast.dm_computed
+    log_msg(f"setup_gateway(gateway_name = {dmcmp.names.api_gateway_name})", info or ast.dm.general.info)
     # @TODO: Fix this weird bug with aws cli not working without shell here?!?
-    results = execute_cmd(ast, refkey='gateway_setup.check_gateway_00', debug=False, stdout=stdout, shell=True)
+    results = execute_cmd(ast, refkey='gateway_setup.check_gateway_00', debug=False, stdout=stdout, info=info, shell=True)
     if 'computed.rest_api_gateways' in results:
         rest_api_gateways = results['computed.rest_api_gateways']
     else:
         rest_api_gateways = []
 
     if( len(rest_api_gateways) > 1):
-        print(f"ERROR: you have too many ({len(rest_api_gateways)}) duplicated gateways matching {ast.dm_computed.names.api_gateway_name}!")
+        print(f"{Fore.RED}ERROR: you have too many ({len(rest_api_gateways)}) duplicated gateways matching {ast.dm_computed.names.api_gateway_name}!")
         sys.exit(1)
     elif (len(rest_api_gateways) == 1):
-        print(f"Gateway {ast.dm_computed.names.api_gateway_name} exists!")
-        print(f"\t id: {rest_api_gateways[0]['id']}")
+        print(f"\tGateway {dmcmp.names.api_gateway_name} exists!")
+        print(f"\t\t id: {rest_api_gateways[0]['id']}")
         ast.set_refkey('computed.rest_api_id', rest_api_gateways[0]['id'])
         ast.set_refkey('computed.root_resource_id', rest_api_gateways[0]['rootResourceId'])
     else:
-        print("Create gateway...")
+        print("\tCreate gateway...")
         results = execute_cmd(ast, refkey='gateway_setup.create_gateway_01', debug=debug, stdout=stdout)
         if 'computed.rest_api_gateway' in results:
             rest_api_gateway = results['computed.rest_api_gateway']
@@ -353,123 +452,251 @@ def setup_gateway(ast: ActiveState, debug: bool = False, stdout: bool = False):
             rest_api_gateway = {}
 
         if(not rest_api_gateway):
-            print(f"ERROR: Issue with creating gateway, nothing returned!")
+            print(f"{Fore.RED}ERROR: Issue with creating gateway, nothing returned!")
             sys.exit(1)
-        print(f"Gateway {ast.dm_computed.names.api_gateway_name} created!")
-        print(f"\t id: {rest_api_gateway['id']}")
+        print(f"\tGateway {dmcmp.names.api_gateway_name} created!")
+        print(f"\t\t id: {rest_api_gateway['id']}")
         ast.set_refkey('computed.rest_api_id', rest_api_gateway['id'])
         ast.set_refkey('computed.root_resource_id', rest_api_gateway['rootResourceId'])
 
 
-def get_gateway_root_id(ast: ActiveState, debug: bool = False, stdout: bool = False):
-    if debug or ast.dm.general.debug:
-        print(f"get_gateway_root_id(gateway_name = {ast.dm_computed.names.api_gateway_name})")
+def get_gateway_root_id(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    dmcmp = ast.dm_computed
+    log_msg(f"get_gateway_root_id(gateway_name = {dmcmp.names.api_gateway_name})", info or ast.dm.general.info)
     ## Step 2 : Get Root Resource ID
-    results = execute_cmd(ast, refkey='gateway_setup.get_resource_id_02', debug=debug)
+    results = execute_cmd(ast, refkey='gateway_setup.get_resource_id_02', debug=debug, stdout=stdout, info=info)
     if 'computed.returned' in results and results['computed.returned']:
         gw_resources = results['computed.returned']
         api_gw_root_ids = jmespath.search("items[?path == '/'].id", gw_resources)
         if len(api_gw_root_ids) != 1:
-            pp.pprint(gw_resources)
-            print("ERROR: did not find apigateway root id!")
+            print(f"{Style.DIM}{pp.pformat(gw_resources)}")
+            print(f"{Fore.RED}ERROR: did not find apigateway root id!")
         else:
             api_gw_root_id = api_gw_root_ids[0]
             ast.set_refkey('computed.gw_root_id', api_gw_root_id)
-            print(f"API Gateway root(/) id : {api_gw_root_id}")
+            print(f"\tAPI Gateway root(/) id : {api_gw_root_id}")
 
-        api_gw_deadman_child = jmespath.search(f"items[?path == '/{ast.dm_computed.names.deadman_uri_path}']", gw_resources)
+        api_gw_deadman_child = jmespath.search(f"items[?path == '/{dmcmp.names.deadman_uri_path}']", gw_resources)
         if len(api_gw_deadman_child) == 1:
             api_gw_deadman_child_id = jmespath.search("id", api_gw_deadman_child[0])
-            print(f"API Gateway child(/{ast.dm_computed.names.deadman_uri_path}) id : {api_gw_deadman_child_id}")
-            ast.set_refkey('computed.deadman_child_id', api_gw_deadman_child_id)
+            if api_gw_deadman_child_id:
+                print(f"\tAPI Gateway child(/{dmcmp.names.deadman_uri_path}) id : {api_gw_deadman_child_id} -> computed.deadman_child_id")
+                ast.set_refkey('computed.deadman_child_id', api_gw_deadman_child_id)
             api_gw_deadman_methods = jmespath.search("resourceMethods", api_gw_deadman_child[0])
-            print(f"API Gateway child(/{ast.dm_computed.names.deadman_uri_path}) methods : {api_gw_deadman_methods}")
-            ast.set_refkey('computed.deadman_methods', api_gw_deadman_methods)
+            if api_gw_deadman_methods:
+                print(f"\tAPI Gateway child(/{dmcmp.names.deadman_uri_path}) methods : {api_gw_deadman_methods} -> computed.deadman_methods")
+                ast.set_refkey('computed.deadman_methods', api_gw_deadman_methods)
 
 
-def create_uri_resources(ast: ActiveState, debug: bool = False, stdout: bool = False):
+def create_uri_resources(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
     ## Step 3 : Create gateway path resource, SETS computed.resouce_id
-    if debug or ast.dm.general.debug:
-        print(f"create_uri_resource(gateway_name = {ast.dm_computed.names.api_gateway_name}, path = {ast.dm_computed.names.deadman_uri_path})")
-    if 'deadman_child_id' in ast.dm_computed.computed and ast.dm_computed.computed['deadman_child_id']:
-        print(f"Resource {ast.dm_computed.names.deadman_uri_path} already exists! @ child_id = {ast.dm_computed.computed.deadman_child_id}")
-    else:
-        results = execute_cmd(ast, refkey='gateway_setup.create_resource_03', debug=True, stdout=stdout)
+    dmcmp = ast.dm_computed
+    log_msg(f"create_uri_resource(gateway_name = {dmcmp.names.api_gateway_name}, path = {dmcmp.names.deadman_uri_path})", info or ast.dm.general.info)
+
+    if(('computed' not in dmcmp) and (not dmcmp.computed)):
+        print(f"{Fore.RED}ERROR: no computed values found! Missing state information for this call.")
+        sys.exit(1)
+
+    if (
+        ('deadman_child_id' not in dmcmp.computed) or
+        (not dmcmp.computed.deadman_child_id)
+    ):
+        results = execute_cmd(ast, refkey='gateway_setup.create_resource_03', debug=debug, stdout=stdout, info=info)
         if 'computed.returned' in results and results['computed.returned']:
             child_resource = results['computed.returned']
             api_gw_deadman_child_id = jmespath.search("id", child_resource)
-            print(f"API Gateway child(/{ast.dm_computed.names.deadman_uri_path}) id : {api_gw_deadman_child_id}")
-            ast.set_refkey('computed.deadman_child_id', api_gw_deadman_child_id)
+            if api_gw_deadman_child_id:
+                print(f"\tAPI Gateway child(/{dmcmp.names.deadman_uri_path}) id : {api_gw_deadman_child_id} -> computed.deadman_child_id")
+                ast.set_refkey('computed.deadman_child_id', api_gw_deadman_child_id)
+            else:
+                print(f"{Fore.RED}ERROR: Failed to create child resource (/{dmcmp.names.deadman_uri_path})")
+                sys.exit(1)
             api_gw_deadman_methods = jmespath.search("resourceMethods", child_resource)
-            print(f"API Gateway child(/{ast.dm_computed.names.deadman_uri_path}) methods : {api_gw_deadman_methods}")
-            ast.set_refkey('computed.deadman_methods', api_gw_deadman_methods)
+            if api_gw_deadman_methods:
+                print(f"\tAPI Gateway child(/{dmcmp.names.deadman_uri_path}) methods : {api_gw_deadman_methods} -> computed.deadman_methods")
+                ast.set_refkey('computed.deadman_methods', api_gw_deadman_methods, set_value_if_none=False)
+    else:
+        print(f"{Style.DIM}\t Resource /{dmcmp.names.deadman_uri_path} already exists on apigateway : {dmcmp.names.api_gateway_name}!")
 
 
-def add_method_to_resource(ast: ActiveState, debug: bool = False, stdout: bool = False):
+def add_method_to_resource(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
     ## Step 4 : Create Method (using resource)
-    if debug or ast.dm.general.debug:
-        print(f"add_method_to_resource(gateway_name = {ast.dm_computed.names.api_gateway_name}, path = {ast.dm_computed.names.deadman_uri_path})")
+    dmcmp = ast.dm_computed
+    log_msg(
+        (
+            f"add_method_to_resource(gateway_name = "
+            f"{ast.dm_computed.names.api_gateway_name}, path = "
+            f"{ast.dm_computed.names.deadman_uri_path})"
+        ),
+        info or ast.dm.general.info
+    )
 
-    if not 'POST'in ast.dm_computed.computed.deadman_methods.toDict():
-        execute_cmd(ast, refkey='gateway_setup.create_method_04', debug=debug, stdout=stdout)
-
-
-def add_api_lambda_integration(ast: ActiveState, debug: bool = False, stdout: bool = False):
-    ## Step 5 : Integrate method with the lambda (no results needed)
-    if debug or ast.dm.general.debug:
-        print(f"add_api_lambda_integration(gateway_name = {ast.dm_computed.names.api_gateway_name}, path = {ast.dm_computed.names.deadman_uri_path}, lambda_arn = {ast.dm_computed.computed.lambda_arn})")
-    execute_cmd(ast, refkey='gateway_setup.associate_lambda_05', debug=debug, stdout=stdout)
-
-
-def get_lambda_perm_policies(ast: ActiveState, debug: bool = False, stdout: bool = False):
-    ## Step 6a : get existing permissions for lambda
-    if debug or ast.dm.general.debug:
-        print(f"get_lambda_perm_policies(lambda = {ast.dm_computed.names.lambda_fun_name})")
-    results = execute_cmd(ast, refkey='gateway_setup.check_lambda_policy', debug=debug, stdout=stdout)
+    # results = execute_cmd(ast, refkey='gateway_setup.create_method_04', debug=debug, stdout=stdout, info=info)
+    results = execute_cmd(ast, refkey='gateway_setup.get_resource_methods', debug=debug, stdout=stdout, info=info)
     if 'computed.returned' in results and results['computed.returned']:
-        lambda_policies = results['computed.returned']
-        return jmespath.search('Policy', lambda_policies)
+        child_resources = results['computed.returned']
+        api_gw_deadman_child_resources = jmespath.search("resourceMethods", child_resources)
+        if (api_gw_deadman_child_resources is None) or ('POST' not in api_gw_deadman_child_resources):
+            results = execute_cmd(ast, refkey='gateway_setup.create_method_04', debug=debug, stdout=stdout, info=info)
+            if(
+                ('computed.returned' in results) and
+                results['computed.returned'] and
+                jmespath.search("httpMethod", results['computed.returned'])
+            ):
+                print(f"\tMethod POST created on /{dmcmp.names.deadman_uri_path} child id: {dmcmp.computed.deadman_child_id}")
+            else:
+                print(f"{Fore.RED}ERROR: Failed to create POST method.")
+                sys.exit(1)
+        else:
+            print(f"\tAlready have resource /{dmcmp.names.deadman_uri_path} child id: {dmcmp.computed.deadman_child_id}) with attached POST method!")
+    else:
+        print(f"{Fore.RED}ERROR: no computed values found! Missing state information for this call.")
+        sys.exit(1)
 
 
-def set_lambda_perm_policy(ast: ActiveState, debug: bool = False, stdout: bool = False):
+def add_api_lambda_integration(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    ## Step 5 : Integrate method with the lambda (no results needed)
+    dmcmp = ast.dm_computed
+    log_msg(f"add_api_lambda_integration(gateway_name = {ast.dm_computed.names.api_gateway_name}, path = {ast.dm_computed.names.deadman_uri_path}, lambda_arn = {ast.dm_computed.computed.lambda_arn})", info or ast.dm.general.info)
+    execute_cmd(ast, refkey='gateway_setup.associate_lambda_05', debug=debug, stdout=stdout, info=info)
+
+
+def get_lambda_perm_policies(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    ## Step 6a : get existing permissions for lambda
+
+    # @TODO: Must fix this to work with state (dev) permission, don't think the other lambda is required
+    dmcmp = ast.dm_computed
+    log_msg(f"get_lambda_perm_policies(lambda = {dmcmp.names.lambda_fun_name})", info or ast.dm.general.info)
+    create_policy = False
+    try:
+        results = execute_cmd(ast, refkey='gateway_setup.check_lambda_policy', debug=debug, stdout=stdout, info=info)
+    except CommandExeception as e:
+        if re.search('ResourceNotFoundException', e.stderr):
+            print(f"\t{Fore.YELLOW}Policy for {dmcmp.names.lambda_fun_name} not found!")
+            return []
+        else:
+            raise e
+    else:
+        if 'computed.returned' in results and results['computed.returned']:
+            lambda_policies = results['computed.returned']
+            pol = jmespath.search('Policy', lambda_policies)
+            return pol
+        return []
+
+
+def set_lambda_perm_policy(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
     ## Step 6 : Grant api gateway permission to invoke lambda function (no results needed)
-    if debug or ast.dm.general.debug:
-        print(f"get_lambda_perm_policies(lambda = {ast.dm_computed.names.lambda_fun_name})")
-    awsgateway_perm_exits = False
-    pol = get_lambda_perm_policies(ast, debug=debug, stdout=stdout)
+    ## Maybe setup_lambda_invoke_perm_06 is wrong or not needed, swapped for setup_apigate_execute_perm
+    ## to update you need to remove it: aws lambda remove-permission --function-name myLambdaFunction --statement-id apigateway-test-1
+    # list permissions:  aws lambda get-policy --function-name SaveDateTimeToS3 | jq '.Policy |= fromjson'
+    dmcmp = ast.dm_computed
+    log_msg(f"set_lambda_perm_policy(lambda = {dmcmp.names.lambda_fun_name})", info or ast.dm.general.info)
+    pol = get_lambda_perm_policies(ast, debug=debug, stdout=stdout, info=info)
     if isinstance(pol, str):
         pol = json.loads(pol)
     sid_invoke_perm = jmespath.search("Statement[?Principal.Service == 'apigateway.amazonaws.com']", pol)
 
-    if len(sid_invoke_perm) >= 1:
-        awsgateway_perm_exits = True
-
-    if not awsgateway_perm_exits:
-        execute_cmd(ast, refkey='gateway_setup.setup_lambda_invoke_perm_06', debug=debug, stdout=stdout)
+    if((not sid_invoke_perm) or (len(sid_invoke_perm) == 0)):
+        execute_cmd(ast, refkey='gateway_setup.setup_apigate_execute_perm', debug=debug, stdout=stdout, info=info)
     else:
-        print("Lambda awsgateway permission already exists")
+        print(f"{Style.DIM}\tLambda awsgateway permission already exists")
 
 
-def create_dev_deployment(ast: ActiveState, debug: bool = False, stdout: bool = False):
-    results = execute_cmd(ast, refkey='gateway_setup.deploy_apigateway_07', debug=False, stdout=False)
+def get_attached_authorizers(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False) -> dict:
+    # Returns all attached authorizers for the apigateway
+    # aws apigateway get-authorizers --rest-api-id <apigateway id>
+    dmcmp = ast.dm_computed
+    log_msg(f"get_attached_authorizers(apigateway_id = {dmcmp.computed.rest_api_id})", info or ast.dm.general.info)
+    results = execute_cmd(ast, refkey='gateway_setup.get_authorizers', debug=debug, stdout=debug)
+    if 'computed.returned' in results and results['computed.returned']:
+        authorizers = results['computed.returned']
+        authorizer = jmespath.search(f"items[?name == '{dmcmp.names.apigateway_authorizer_name}']|[0]", authorizers)
+        if authorizer:
+            authorizer_id = jmespath.search(f"id", authorizer)
+            if authorizer_id:
+                print(f"\tAPI Gateway authorizer(/{dmcmp.names.apigateway_authorizer_name}) id : {authorizer_id} -> computed.apigateway_authorizer_id")
+                ast.set_refkey('computed.apigateway_authorizer_id', authorizer_id)
+        return authorizer
+    else:
+        return {}
+
+
+def setup_apigateway_authorizer(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    # Working cli to setup a TOKEN authorizor:
+    # aws apigateway create-authorizer \
+    #   --rest-api-id <rest api id> \
+    #   --name <authorizor unique name> \
+    #   --type TOKEN \
+    #   --authorizer-uri 'arn:aws:apigateway:<region>:lambda:path/2015-03-31/functions/arn:aws:lambda:<region>:<account id>:function:<name of lambda func>/invocations' \
+    #   --identity-source 'method.request.header.<header label>' --authorizer-result-ttl-in-seconds 300
+    # header label Authorization
+    dmcmp = ast.dm_computed
+    log_msg(f"setup_apigateway_authorizer(lambda = {dmcmp.names.lambda_fun_name})", info or ast.dm.general.info)
+
+    authorizer = get_attached_authorizers(ast, debug=debug, stdout=stdout, info=info)
+    if not authorizer:
+        results = execute_cmd(ast, refkey='gateway_setup.setup_authorizer', debug=debug, stdout=debug)
+        if 'computed.returned' in results and results['computed.returned']:
+            authorizers = results['computed.returned']
+            authorizer = jmespath.search(f"items[?name == '{dmcmp.names.apigateway_authorizer_name}']|[0]", authorizers)
+            if authorizer:
+                authorizer_id = jmespath.search(f"id", authorizer)
+                if authorizer_id:
+                    print(f"\tAPI Gateway authorizer(/{dmcmp.names.apigateway_authorizer_name}) id : {authorizer_id} -> computed.apigateway_authorizer_id")
+                    ast.set_refkey('computed.apigateway_authorizer_id', authorizer_id)
+            return authorizer
+        else:
+            print(f"{Fore.YELLOW}WARNING: no result, may have failed to create authorizer for apigateway!")
+    else:
+        print(f"{Style.DIM}\tAuthorizer {dmcmp.names.apigateway_authorizer_name} for awsgateway already exists")
+
+
+def attach_authorizer_to_lambda_method(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    # aws apigateway update-method --rest-api-id <api_id> --resource-id <resource_id> --http-method <method> --patch-operations op='replace',path='/authorizationType',value='CUSTOM' op='replace',path='/authorizerId',value='<authorizer_id>'
+    dmcmp = ast.dm_computed
+    log_msg(f"attach_authorizer_to_lambda_method(lambda = {dmcmp.names.lambda_fun_name})", info or ast.dm.general.info)
+    results = execute_cmd(ast, refkey='gateway_setup.attach_lambda_method_api_authorizer', debug=debug, stdout=stdout, info=info)
+    if 'computed.returned' in results and results['computed.returned']:
+        returned = results['computed.returned']
+        if returned:
+            print(f"{Style.DIM}\t/{dmcmp.names.deadman_uri_path} method id {dmcmp.computed.deadman_child_id} attached/updated to use Authorizer {dmcmp.names.apigateway_authorizer_name} id on awsgateway {dmcmp.names.api_gateway_name} id {dmcmp.computed.rest_api_id}")
+        else:
+            print(f"{Fore.YELLOW}WARNING: no result, may have failed to attach/update authorizer for method on apigateway!")
+
+
+def create_dev_deployment(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    dmcmp = ast.dm_computed
+    log_msg(f"create_dev_deployment(lambda = {ast.dm_computed.names.api_gateway_name})", info or ast.dm.general.info)
+    results = execute_cmd(ast, refkey='gateway_setup.deploy_apigateway_07', debug=debug, stdout=debug)
     if 'computed.returned' in results and results['computed.returned']:
         aws_gw_child = results['computed.returned']
-        print(aws_gw_child)
+        if aws_gw_child:
+            print(f"{Style.DIM}\t{dmcmp.names.api_gateway_name} gatewayapi id: {aws_gw_child} state {dmcmp.names.apigateway_stage} deployed.")
+        else:
+            print(f"{Fore.YELLOW}WARNING: no result, may have failed to deploy state {ast.dm_computed.computed.names.apigateway_stage}.")
+
+
+def update_dev_deployment(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    dmcmp = ast.dm_computed
+    log_msg(f"{Fore.GREEN}update_dev_deployment(lambda = {dmcmp.names.api_gateway_name})", info or ast.dm.general.info)
+    results = execute_cmd(ast, refkey='gateway_setup.update_apigateway', debug=debug, stdout=debug)
+    pp.pprint(results)
 
 
 def setup_lambda_stack(ast: ActiveState):
     # create a local tmp directory
-
     # TODO: Fixes needed, if gateway id changes, must update lambda policy "apigateway-lambda-invoke"!
 
     path = pathlib.Path(ast.dm.paths.tmp_dir)
     path.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=ast.dm.paths.tmp_dir) as temp_dir:
         print(f"Temporary directory created at: {temp_dir}")
+        package_lambdas(ast, debug=False)
         get_api_account(ast, debug=False)
         get_or_create_iam_lambda_assume_role(ast, debug=False)
         get_or_create_s3_bucket(ast, debug=False)
         get_or_setup_lambda_fun(ast, debug=False)
+        get_or_create_authorizer_fun(ast, debug=False)
         setup_iam_bucket_policy(ast, debug=False)
         setup_iam_logging_policy(ast, debug=False)
         attach_policies_to_lambda_role(ast, debug=False)
@@ -482,6 +709,9 @@ def setup_lambda_stack(ast: ActiveState):
         add_api_lambda_integration(ast, debug=False)
         set_lambda_perm_policy(ast, debug=False)
         create_dev_deployment(ast, debug=False)
+        setup_apigateway_authorizer(ast, debug=False)
+        # attach_authorizer_to_lambda_method(ast, debug=False)
+        # # update_dev_deployment(ast, debug=False)  # no update data yet (dummy ftm)
 
 
 def test_deadman_url(ast: ActiveState, debug: bool = False, stdout: bool = False):
@@ -502,6 +732,7 @@ def test_deadman_url(ast: ActiveState, debug: bool = False, stdout: bool = False
         print("Successfully tested URL")
     else:
         print("Failed to test URL")
+
 
 def main(ast: ActiveState, args: bool):
     """
@@ -530,12 +761,8 @@ if __name__=="__main__":
         '--region', metavar='region', required=False, default=None,
         help='The AWS region used to execute cli commands'
     )
-    parser.add_argument(
-        '--setup-stack', action='store_true'
-    )
-    parser.add_argument(
-        '--test-deadman', action='store_true'
-    )
+    parser.add_argument('--setup-stack', action='store_true')
+    parser.add_argument('--test-deadman', action='store_true')
     args = parser.parse_args()
     if((args.config_path is not None)):
         ast = ActiveState(args.config_path)
