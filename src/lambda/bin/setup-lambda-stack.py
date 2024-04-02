@@ -663,10 +663,40 @@ def attach_authorizer_to_lambda_method(ast: ActiveState, debug: bool = False, st
         else:
             print(f"{Fore.YELLOW}WARNING: no result, may have failed to attach/update authorizer for method on apigateway!")
 
+def add_invoke_authorizer_permission_to_apigateway(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+    # This runs a command that allows apigatway permissions to invoke our authorizer lambda functions
+    # should probably check if this exists already, then create.
+    dmcmp = ast.dm_computed
+    log_msg(f"add_invoke_authorizer_permission_to_apigateway(lambda = {dmcmp.names.lambda_auth_fun_name} apigateway = {dmcmp.names.api_gateway_name})", info or ast.dm.general.info)
+    add_invoke_auth_perm = True
+    results = execute_cmd(ast, refkey='gateway_setup.get_lambda_authorizer_policies', debug=debug, stdout=debug)
+    if 'computed.returned' in results and results['computed.returned']:
+        returned = results['computed.returned']
+        if(returned and ('Policy' in returned) and returned['Policy']):
+            policy = json.loads(returned['Policy']) if (type(returned['Policy']) is str) else returned['Policy']
+            if policy:
+                sid = jmespath.search(f"Statement[?Sid == '{dmcmp.names.lambda_authorizer_resource_statement_id}']", policy)
+                if sid:
+                    add_invoke_auth_perm = False
+    if not add_invoke_auth_perm:
+        print(f"\t{Style.DIM}Lambda authorizer apigateway lambda:InvokeFunction already present.")
+    else:
+        results = execute_cmd(ast, refkey='gateway_setup.add_lambda_authorizer_invoke_apigateway_permission', debug=debug, stdout=stdout, info=info)
+        if 'computed.returned' in results and results['computed.returned']:
+            returned = results['computed.returned']
+            if 'Statement'in returned:
+                # just assuming this worked..
+                print(f"{Style.DIM}\tAdded lambda:InvokeFunction from apigateway permission to {dmcmp.names.lambda_auth_fun_name}'s Resource-based policy statements.")
+            else:
+                print("No change")
+        else:
+            print("ERROR: call did not return anything!")
+            sys.exit(1)
 
 def create_dev_deployment(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
     dmcmp = ast.dm_computed
     log_msg(f"create_dev_deployment(lambda = {ast.dm_computed.names.api_gateway_name})", info or ast.dm.general.info)
+
     results = execute_cmd(ast, refkey='gateway_setup.deploy_apigateway_07', debug=debug, stdout=debug)
     if 'computed.returned' in results and results['computed.returned']:
         aws_gw_child = results['computed.returned']
@@ -710,7 +740,7 @@ def setup_lambda_stack(ast: ActiveState):
         set_lambda_perm_policy(ast, debug=False)
         create_dev_deployment(ast, debug=False)
         setup_apigateway_authorizer(ast, debug=False)
-        # attach_authorizer_to_lambda_method(ast, debug=False)
+        add_invoke_authorizer_permission_to_apigateway(ast, debug=False)
         # # update_dev_deployment(ast, debug=False)  # no update data yet (dummy ftm)
 
 

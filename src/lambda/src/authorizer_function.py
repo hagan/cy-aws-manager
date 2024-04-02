@@ -12,13 +12,13 @@ def handler(event, context):
         expected_token = file.read().strip()
 
     # Extract the token from the incoming request
+    logger.warning(pprint.pformat(event))
     token = event['authorizationToken']
 
     # Compare the extracted token to your fixed token
     logger.info(f'expected: {expected_token}')
     logger.info(f'     got: {token}')
-    # if f'Bearer {expected_token}' == token:
-    if True:
+    if expected_token == token:
         # Return an IAM policy that allows access
         return generate_policy('deadman', 'Allow', event['methodArn'])
     else:
