@@ -304,7 +304,6 @@ def get_or_create_authorizer_fun(ast: ActiveState, debug: bool = False, stdout: 
     ## Create Lambda function
     if(create_new_auth_func):
         results = execute_cmd(ast, refkey='lambda_setup.create_lambda_authorizer', debug=debug, stdout=stdout, info=info)
-        pp.pprint(results)
         if (('computed.returned' in results) and results['computed.returned']):
             print(f"\tLambda function '{results['computed.returned']}' created!")
         else:
@@ -602,96 +601,104 @@ def set_lambda_perm_policy(ast: ActiveState, debug: bool = False, stdout: bool =
         print(f"{Style.DIM}\tLambda awsgateway permission already exists")
 
 
-def get_attached_authorizers(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False) -> dict:
-    # Returns all attached authorizers for the apigateway
-    # aws apigateway get-authorizers --rest-api-id <apigateway id>
-    dmcmp = ast.dm_computed
-    log_msg(f"get_attached_authorizers(apigateway_id = {dmcmp.computed.rest_api_id})", info or ast.dm.general.info)
-    results = execute_cmd(ast, refkey='gateway_setup.get_authorizers', debug=debug, stdout=debug)
-    if 'computed.returned' in results and results['computed.returned']:
-        authorizers = results['computed.returned']
-        authorizer = jmespath.search(f"items[?name == '{dmcmp.names.apigateway_authorizer_name}']|[0]", authorizers)
-        if authorizer:
-            authorizer_id = jmespath.search(f"id", authorizer)
-            if authorizer_id:
-                print(f"\tAPI Gateway authorizer(/{dmcmp.names.apigateway_authorizer_name}) id : {authorizer_id} -> computed.apigateway_authorizer_id")
-                ast.set_refkey('computed.apigateway_authorizer_id', authorizer_id)
-        return authorizer
-    else:
-        return {}
+# def get_attached_authorizers(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False) -> dict:
+#     # Returns all attached authorizers for the apigateway
+#     # aws apigateway get-authorizers --rest-api-id <apigateway id>
+#     dmcmp = ast.dm_computed
+#     log_msg(f"get_attached_authorizers(apigateway_id = {dmcmp.computed.rest_api_id})", info or ast.dm.general.info)
+#     results = execute_cmd(ast, refkey='gateway_setup.get_authorizers', debug=debug, stdout=debug)
+#     if 'computed.returned' in results and results['computed.returned']:
+#         authorizers = results['computed.returned']
+#         authorizer = jmespath.search(f"items[?name == '{dmcmp.names.apigateway_authorizer_name}']|[0]", authorizers)
+#         if authorizer:
+#             authorizer_id = jmespath.search(f"id", authorizer)
+#             if authorizer_id:
+#                 print(f"\tAPI Gateway authorizer(/{dmcmp.names.apigateway_authorizer_name}) id : {authorizer_id} -> computed.apigateway_authorizer_id")
+#                 ast.set_refkey('computed.apigateway_authorizer_id', authorizer_id)
+#         return authorizer
+#     else:
+#         return {}
 
 
-def setup_apigateway_authorizer(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
-    # Working cli to setup a TOKEN authorizor:
-    # aws apigateway create-authorizer \
-    #   --rest-api-id <rest api id> \
-    #   --name <authorizor unique name> \
-    #   --type TOKEN \
-    #   --authorizer-uri 'arn:aws:apigateway:<region>:lambda:path/2015-03-31/functions/arn:aws:lambda:<region>:<account id>:function:<name of lambda func>/invocations' \
-    #   --identity-source 'method.request.header.<header label>' --authorizer-result-ttl-in-seconds 300
-    # header label Authorization
-    dmcmp = ast.dm_computed
-    log_msg(f"setup_apigateway_authorizer(lambda = {dmcmp.names.lambda_fun_name})", info or ast.dm.general.info)
+# def setup_apigateway_authorizer(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+#     # Working cli to setup a TOKEN authorizor:
+#     # aws apigateway create-authorizer \
+#     #   --rest-api-id <rest api id> \
+#     #   --name <authorizor unique name> \
+#     #   --type TOKEN \
+#     #   --authorizer-uri 'arn:aws:apigateway:<region>:lambda:path/2015-03-31/functions/arn:aws:lambda:<region>:<account id>:function:<name of lambda func>/invocations' \
+#     #   --identity-source 'method.request.header.<header label>' --authorizer-result-ttl-in-seconds 300
+#     # header label Authorization
+#     dmcmp = ast.dm_computed
+#     log_msg(f"setup_apigateway_authorizer(lambda = {dmcmp.names.lambda_fun_name})", info or ast.dm.general.info)
 
-    authorizer = get_attached_authorizers(ast, debug=debug, stdout=stdout, info=info)
-    if not authorizer:
-        results = execute_cmd(ast, refkey='gateway_setup.setup_authorizer', debug=debug, stdout=debug)
-        if 'computed.returned' in results and results['computed.returned']:
-            authorizers = results['computed.returned']
-            authorizer = jmespath.search(f"items[?name == '{dmcmp.names.apigateway_authorizer_name}']|[0]", authorizers)
-            if authorizer:
-                authorizer_id = jmespath.search(f"id", authorizer)
-                if authorizer_id:
-                    print(f"\tAPI Gateway authorizer(/{dmcmp.names.apigateway_authorizer_name}) id : {authorizer_id} -> computed.apigateway_authorizer_id")
-                    ast.set_refkey('computed.apigateway_authorizer_id', authorizer_id)
-            return authorizer
-        else:
-            print(f"{Fore.YELLOW}WARNING: no result, may have failed to create authorizer for apigateway!")
-    else:
-        print(f"{Style.DIM}\tAuthorizer {dmcmp.names.apigateway_authorizer_name} for awsgateway already exists")
+#     authorizer = get_attached_authorizers(ast, debug=debug, stdout=stdout, info=info)
+#     if not authorizer:
+#         results = execute_cmd(ast, refkey='gateway_setup.setup_authorizer', debug=debug, stdout=debug)
+#         if 'computed.returned' in results and results['computed.returned']:
+#             authorizers = results['computed.returned']
+#             authorizer = jmespath.search(f"items[?name == '{dmcmp.names.apigateway_authorizer_name}']|[0]", authorizers)
+#             if authorizer:
+#                 authorizer_id = jmespath.search(f"id", authorizer)
+#                 if authorizer_id:
+#                     print(f"\tAPI Gateway authorizer(/{dmcmp.names.apigateway_authorizer_name}) id : {authorizer_id} -> computed.apigateway_authorizer_id")
+#                     ast.set_refkey('computed.apigateway_authorizer_id', authorizer_id)
+#             return authorizer
+#         else:
+#             print(f"{Fore.YELLOW}WARNING: no result, may have failed to create authorizer for apigateway!")
+#     else:
+#         print(f"{Style.DIM}\tAuthorizer {dmcmp.names.apigateway_authorizer_name} for awsgateway already exists")
 
 
-def attach_authorizer_to_lambda_method(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
-    # aws apigateway update-method --rest-api-id <api_id> --resource-id <resource_id> --http-method <method> --patch-operations op='replace',path='/authorizationType',value='CUSTOM' op='replace',path='/authorizerId',value='<authorizer_id>'
-    dmcmp = ast.dm_computed
-    log_msg(f"attach_authorizer_to_lambda_method(lambda = {dmcmp.names.lambda_fun_name})", info or ast.dm.general.info)
-    results = execute_cmd(ast, refkey='gateway_setup.attach_lambda_method_api_authorizer', debug=debug, stdout=stdout, info=info)
-    if 'computed.returned' in results and results['computed.returned']:
-        returned = results['computed.returned']
-        if returned:
-            print(f"{Style.DIM}\t/{dmcmp.names.deadman_uri_path} method id {dmcmp.computed.deadman_child_id} attached/updated to use Authorizer {dmcmp.names.apigateway_authorizer_name} id on awsgateway {dmcmp.names.api_gateway_name} id {dmcmp.computed.rest_api_id}")
-        else:
-            print(f"{Fore.YELLOW}WARNING: no result, may have failed to attach/update authorizer for method on apigateway!")
+# def attach_authorizer_to_lambda_method(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+#     # aws apigateway update-method --rest-api-id <api_id> --resource-id <resource_id> --http-method <method> --patch-operations op='replace',path='/authorizationType',value='CUSTOM' op='replace',path='/authorizerId',value='<authorizer_id>'
+#     dmcmp = ast.dm_computed
+#     log_msg(f"attach_authorizer_to_lambda_method(lambda = {dmcmp.names.lambda_fun_name})", info or ast.dm.general.info)
+#     results = execute_cmd(ast, refkey='gateway_setup.attach_lambda_method_api_authorizer', debug=debug, stdout=stdout, info=info)
+#     if 'computed.returned' in results and results['computed.returned']:
+#         returned = results['computed.returned']
+#         if returned:
+#             print(f"{Style.DIM}\t/{dmcmp.names.deadman_uri_path} method id {dmcmp.computed.deadman_child_id} attached/updated to use Authorizer {dmcmp.names.apigateway_authorizer_name} id on awsgateway {dmcmp.names.api_gateway_name} id {dmcmp.computed.rest_api_id}")
+#         else:
+#             print(f"{Fore.YELLOW}WARNING: no result, may have failed to attach/update authorizer for method on apigateway!")
 
-def add_invoke_authorizer_permission_to_apigateway(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
-    # This runs a command that allows apigatway permissions to invoke our authorizer lambda functions
-    # should probably check if this exists already, then create.
-    dmcmp = ast.dm_computed
-    log_msg(f"add_invoke_authorizer_permission_to_apigateway(lambda = {dmcmp.names.lambda_auth_fun_name} apigateway = {dmcmp.names.api_gateway_name})", info or ast.dm.general.info)
-    add_invoke_auth_perm = True
-    results = execute_cmd(ast, refkey='gateway_setup.get_lambda_authorizer_policies', debug=debug, stdout=debug)
-    if 'computed.returned' in results and results['computed.returned']:
-        returned = results['computed.returned']
-        if(returned and ('Policy' in returned) and returned['Policy']):
-            policy = json.loads(returned['Policy']) if (type(returned['Policy']) is str) else returned['Policy']
-            if policy:
-                sid = jmespath.search(f"Statement[?Sid == '{dmcmp.names.lambda_authorizer_resource_statement_id}']", policy)
-                if sid:
-                    add_invoke_auth_perm = False
-    if not add_invoke_auth_perm:
-        print(f"\t{Style.DIM}Lambda authorizer apigateway lambda:InvokeFunction already present.")
-    else:
-        results = execute_cmd(ast, refkey='gateway_setup.add_lambda_authorizer_invoke_apigateway_permission', debug=debug, stdout=stdout, info=info)
-        if 'computed.returned' in results and results['computed.returned']:
-            returned = results['computed.returned']
-            if 'Statement'in returned:
-                # just assuming this worked..
-                print(f"{Style.DIM}\tAdded lambda:InvokeFunction from apigateway permission to {dmcmp.names.lambda_auth_fun_name}'s Resource-based policy statements.")
-            else:
-                print("No change")
-        else:
-            print("ERROR: call did not return anything!")
-            sys.exit(1)
+
+# def add_invoke_authorizer_permission_to_apigateway(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
+#     # This runs a command that allows apigatway permissions to invoke our authorizer lambda functions
+#     # should probably check if this exists already, then create.
+#     dmcmp = ast.dm_computed
+#     log_msg(f"add_invoke_authorizer_permission_to_apigateway(lambda = {dmcmp.names.lambda_auth_fun_name} apigateway = {dmcmp.names.api_gateway_name})", info or ast.dm.general.info)
+#     invoke_auth_perm_exist = False
+#     results = execute_cmd(ast, refkey='gateway_setup.get_lambda_authorizer_policies', debug=debug, stdout=debug)
+#     if 'computed.returned' in results and results['computed.returned']:
+#         returned = results['computed.returned']
+#         if(returned and ('Policy' in returned) and returned['Policy']):
+#             policy = json.loads(returned['Policy']) if (type(returned['Policy']) is str) else returned['Policy']
+#             if policy:
+#                 sid = jmespath.search(f"Statement[?Sid == '{dmcmp.names.authorizer_deadman_post_resource_sid}']", policy)
+#                 if sid:
+#                     invoke_auth_perm_exist = True
+#     if invoke_auth_perm_exist:
+#         print(f"\t{Style.DIM}Lambda authorizer apigateway lambda:InvokeFunction already present. Removing...")
+#         results = execute_cmd(ast, refkey='gateway_setup.remove_lambda_authorizer_policies', debug=debug, stdout=debug)
+#         if 'computed.returned' in results and results['computed.returned']:
+#             returned = results['computed.returned']
+#             pp.pprint(returned)
+#             sys.exit(0)
+
+#     # Latest, after apigateway setup..
+#     results = execute_cmd(ast, refkey='gateway_setup.add_lambda_authorizer_invoke_apigateway_permission', debug=debug, stdout=stdout, info=info)
+#     if 'computed.returned' in results and results['computed.returned']:
+#         returned = results['computed.returned']
+#         if 'Statement'in returned:
+#             # just assuming this worked..
+#             print(f"\t{Style.DIM}\tAdded lambda:InvokeFunction from apigateway permission to {dmcmp.names.lambda_auth_fun_name}'s Resource-based policy statements.")
+#         else:
+#             print(f"{Fore.RED}ERROR during add_invoke_authorizer_permission_to_apigateway...")
+#             sys.exit(1)
+#     else:
+#         print(f"{Fore.RED}ERROR: call did not return anything!")
+#         sys.exit(1)
 
 def create_dev_deployment(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
     dmcmp = ast.dm_computed
@@ -704,6 +711,14 @@ def create_dev_deployment(ast: ActiveState, debug: bool = False, stdout: bool = 
             print(f"{Style.DIM}\t{dmcmp.names.api_gateway_name} gatewayapi id: {aws_gw_child} state {dmcmp.names.apigateway_stage} deployed.")
         else:
             print(f"{Fore.YELLOW}WARNING: no result, may have failed to deploy state {ast.dm_computed.computed.names.apigateway_stage}.")
+
+
+def apigateway__create_api_key():
+    """
+    apigateway create-api-key
+    """
+    dmcmp = ast.dm_computed
+    log_msg(f"apigateway__create_api_key(name = {dmcmp.names.api_key_name})", info or ast.dm.general.info)
 
 
 def update_dev_deployment(ast: ActiveState, debug: bool = False, stdout: bool = False, info: bool = False):
@@ -726,7 +741,7 @@ def setup_lambda_stack(ast: ActiveState):
         get_or_create_iam_lambda_assume_role(ast, debug=False)
         get_or_create_s3_bucket(ast, debug=False)
         get_or_setup_lambda_fun(ast, debug=False)
-        get_or_create_authorizer_fun(ast, debug=False)
+        # get_or_create_authorizer_fun(ast, debug=False)
         setup_iam_bucket_policy(ast, debug=False)
         setup_iam_logging_policy(ast, debug=False)
         attach_policies_to_lambda_role(ast, debug=False)
@@ -739,8 +754,8 @@ def setup_lambda_stack(ast: ActiveState):
         add_api_lambda_integration(ast, debug=False)
         set_lambda_perm_policy(ast, debug=False)
         create_dev_deployment(ast, debug=False)
-        setup_apigateway_authorizer(ast, debug=False)
-        add_invoke_authorizer_permission_to_apigateway(ast, debug=False)
+        # setup_apigateway_authorizer(ast, debug=False)
+        # add_invoke_authorizer_permission_to_apigateway(ast, debug=False)
         # # update_dev_deployment(ast, debug=False)  # no update data yet (dummy ftm)
 
 
@@ -764,7 +779,74 @@ def test_deadman_url(ast: ActiveState, debug: bool = False, stdout: bool = False
         print("Failed to test URL")
 
 
-def main(ast: ActiveState, args: bool):
+def provision_api_key(ast: ActiveState, debug: bool = False, stdout: bool = False):
+    dmcmp = ast.dm_computed
+    if debug or dmcmp.general.debug:
+        print(f"provision_api_key()")
+
+    print(f"Fetching existing keys from aws...")
+    results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__get_api_keys', debug=debug, stdout=stdout)
+    if 'computed.returned' in results and results['computed.returned']:
+        apikeys = jmespath.search(f"items[?name == '{dmcmp.names.api_gateway_api_key_name}']", results['computed.returned'])
+        if len(apikeys) == 1:
+            print(f"\tAPI KEY '{dmcmp.names.api_gateway_api_key_name}' already exists!")
+            returned = apikeys[0]
+        elif(len(apikeys) > 1):
+            print(f"{Fore.RED}ERROR: Too many idential any API keys returned! Aborting")
+            sys.exit(1)
+        else:
+            # No keys
+            print(f"Generating key for {dmcmp.names.api_gateway_api_key_name}")
+            results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__create_api_key', debug=debug, stdout=stdout)
+            returned = results['computed.returned'] if 'computed.returned' in results else {}
+        pp.pprint(returned)
+
+        name = returned['name'] if 'name' in returned else None
+        create_date = returned['createdDate'] if 'createdDate' in returned else None
+        _id = returned['id'] if 'id' in returned else None
+        if _id is not None:
+            ast.set_refkey('computed.apigateway_apikey_id', _id)
+        value = returned['value'] if 'value' in returned else None
+        if value is None:
+            prnt_value = '****************************************'
+        else:
+            prnt_value = value
+
+        print(f"\tAPI KEY='{prnt_value}', id = {_id}")
+    else:
+        print(f"{Fore.RED}ERROR: failed to execute get_api_keys command, could not create an api key!")
+        sys.exit(1)
+
+    print(f"Usage plan id = '{dmcmp.names.api_gateway_api_key_usage_plan_id}, key id = '{ast.dm_computed.computed.apigateway_apikey_id}'")
+    results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__create_usage_plan_key', debug=debug, stdout=stdout)
+    pp.pprint(results)
+    #
+    #
+    # created_new_key = False
+    # if 'computed.returned' in results and results['computed.returned']:
+    #
+    #     name = returned['name'] if 'name' in returned else None
+    #     create_date = returned['createdDate'] if 'createdDate' in returned else None
+    #     _id = returned['id'] if 'id' in returned else None
+    #     value = returned['value'] if 'value' in returned else None
+
+    #     if name and create_date and _id and value:
+    #         ast.set_refkey('computed.apigateway_api_key_id', _id)
+    #         created_new_key = True
+    #         print(f"API KEY: '{value}'")
+    # else:
+    #
+
+        # if _id:
+
+        # results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__create_usage_plan_key', debug=debug, stdout=stdout)
+        # pp.pprint(results)
+        # else:
+        #     print("")
+
+
+
+def main(ast: ActiveState, args: bool, parser: argparse.ArgumentParser):
     """
     Create lambda function and api gateway
     """
@@ -773,7 +855,13 @@ def main(ast: ActiveState, args: bool):
     elif args.test_deadman:
         print("Testing...")
         test_deadman_url(ast)
-
+    elif args.provision_api_key:
+        print("Provisioning API key on lambda stack")
+        provision_api_key(ast)
+    else:
+        parser.print_help()
+        print("\nMust include one of the following flags:")
+        print("--setup-stack | --test-deadman | --provision-api-key")
     sys.exit(0)
 
 
@@ -793,6 +881,7 @@ if __name__=="__main__":
     )
     parser.add_argument('--setup-stack', action='store_true')
     parser.add_argument('--test-deadman', action='store_true')
+    parser.add_argument('--provision-api-key', action='store_true')
     args = parser.parse_args()
     if((args.config_path is not None)):
         ast = ActiveState(args.config_path)
@@ -827,4 +916,4 @@ if __name__=="__main__":
         print("\nError: No default region, use --region <name>")
         sys.exit(1)
 
-    main(ast, args)
+    main(ast, args, parser)

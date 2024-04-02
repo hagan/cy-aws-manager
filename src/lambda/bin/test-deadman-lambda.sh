@@ -8,23 +8,26 @@ while [ -L "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 DIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
 
-echo "Testing Deadman Lambda w/ Bearer token auth...."
+echo "Testing Lambda w/ API KEY auth...."
 APIGATEWAY_ID=`aws apigateway get-rest-apis $@ | jq -r -c '.items[] | if .name == "cy-awsmgr-gateway" then .id else empty end'`
-AUTH_TOKEN=`cat $(realpath $DIR/../src/token.txt) | tr -d '\n'`
+aws apigateway get-api-keys --name-query 'VICE_DEMO_ACCESSKEY' $@ | jq
 
-if [[ -z $APIGATEWAY_ID ]] ; then
-  echo "ERROR: APIGATEWAY_ID is empty! Try passing --profile <awsusername> --region <region>"
-  exit 1
-fi
+# aws apigateway get-api-key --api-key 'VICEAPP' --include-value $@
+# echo $APIKEYVALUE
 
-if [[ -z $AUTH_TOKEN ]]; then
-  echo "ERROR: AUTH_TOKEN is empty! Might be an issue with token.txt file..."
-  exit 1
-fi
+# if [[ -z $APIGATEWAY_ID ]] ; then
+#   echo "ERROR: APIGATEWAY_ID is empty! Try passing --profile <awsusername> --region <region>"
+#   exit 1
+# fi
 
-AUTH_TOKEN='bad'
+# # if [[ -z $AUTH_TOKEN ]]; then
+# #   echo "ERROR: AUTH_TOKEN is empty! Might be an issue with token.txt file..."
+# #   exit 1
+# # fi
 
-echo "APIGATEWAY_ID = $APIGATEWAY_ID"
-echo "   AUTH_TOKEN = $AUTH_TOKEN"
+# # APIKEY
 
-curl -X POST https://$APIGATEWAY_ID.execute-api.us-west-2.amazonaws.com/dev/deadman -H "Authorization: $AUTH_TOKEN" -H "Content-Type: application/json"
+# echo "APIGATEWAY_ID = $APIGATEWAY_ID"
+# # echo "   AUTH_TOKEN = $AUTH_TOKEN"
+
+# curl -X POST https://$APIGATEWAY_ID.execute-api.us-west-2.amazonaws.com/dev/deadman -H "x-api-key: BOlltKEZey2Qao9ShoRbr64U8Juhdor932KfxaKa" -H "Content-Type: application/json"

@@ -1,24 +1,25 @@
 import os
 import logging
+import pprint
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
 def handler(event, context):
-    logger.info("authorizer_function.handler() called!")
     token_file = 'token.txt'
 
     with open(token_file, 'r') as file:
-        expected_token = file.read().strip()
+        local_token = file.read().strip()
 
     # Extract the token from the incoming request
     logger.warning(pprint.pformat(event))
     token = event['authorizationToken']
 
     # Compare the extracted token to your fixed token
-    logger.info(f'expected: {expected_token}')
-    logger.info(f'     got: {token}')
-    if expected_token == token:
+    logger.info(f'   local token: {local_token}')
+    logger.info(f'recieved token: {token}')
+    if local_token == token:
         # Return an IAM policy that allows access
         return generate_policy('deadman', 'Allow', event['methodArn'])
     else:
