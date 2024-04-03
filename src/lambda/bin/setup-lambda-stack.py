@@ -784,7 +784,13 @@ def provision_api_key(ast: ActiveState, debug: bool = False, stdout: bool = Fals
     if debug or dmcmp.general.debug:
         print(f"provision_api_key()")
 
+    # get account_id & rest_api_id
+    get_api_account(ast, debug=debug, stdout=stdout)
+    setup_gateway(ast, debug=debug, stdout=stdout)
+    get_gateway_root_id(ast, debug=debug, stdout=stdout)
+
     print(f"Fetching existing keys from aws...")
+    ## 1) get existing apigateway API KEYs for our apigateway
     results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__get_api_keys', debug=debug, stdout=stdout)
     if 'computed.returned' in results and results['computed.returned']:
         apikeys = jmespath.search(f"items[?name == '{dmcmp.names.api_gateway_api_key_name}']", results['computed.returned'])
@@ -799,51 +805,79 @@ def provision_api_key(ast: ActiveState, debug: bool = False, stdout: bool = Fals
             print(f"Generating key for {dmcmp.names.api_gateway_api_key_name}")
             results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__create_api_key', debug=debug, stdout=stdout)
             returned = results['computed.returned'] if 'computed.returned' in results else {}
-        pp.pprint(returned)
-
+        ## Store the name/value of our api key
         name = returned['name'] if 'name' in returned else None
         create_date = returned['createdDate'] if 'createdDate' in returned else None
         _id = returned['id'] if 'id' in returned else None
         if _id is not None:
+            print(f"{Style.DIM}\tapigateway_apikey_id = '{_id}'")
             ast.set_refkey('computed.apigateway_apikey_id', _id)
         value = returned['value'] if 'value' in returned else None
         if value is None:
             prnt_value = '****************************************'
         else:
             prnt_value = value
-
-        print(f"\tAPI KEY='{prnt_value}', id = {_id}")
+        print(f"\tAPI KEY ID = {_id}, API KEY VALUE='{prnt_value}'")
     else:
         print(f"{Fore.RED}ERROR: failed to execute get_api_keys command, could not create an api key!")
         sys.exit(1)
 
-    print(f"Usage plan id = '{dmcmp.names.api_gateway_api_key_usage_plan_id}, key id = '{ast.dm_computed.computed.apigateway_apikey_id}'")
-    results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__create_usage_plan_key', debug=debug, stdout=stdout)
-    pp.pprint(results)
-    #
-    #
-    # created_new_key = False
-    # if 'computed.returned' in results and results['computed.returned']:
-    #
-    #     name = returned['name'] if 'name' in returned else None
-    #     create_date = returned['createdDate'] if 'createdDate' in returned else None
-    #     _id = returned['id'] if 'id' in returned else None
-    #     value = returned['value'] if 'value' in returned else None
+    ## 2) Get or Create usage plan
+    results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__get_usage_plans', debug=debug, stdout=stdout)
+    if 'computed.returned' in results and results['computed.returned']:
+        usageplans = jmespath.search(f"items[?name == '{dmcmp.names.api_gateway_usage_plan_name}']", results['computed.returned'])
+        if len(usageplans) == 1:
+            print(f"\t{Style.DIM}{dmcmp.names.api_gateway_usage_plan_name} usage plan exists already")
+            returned = usageplans[0]
+        elif(len(usageplans) > 1):
+            print(f"{Fore.RED}ERROR: Too many idential usage plans keys returned! Aborting")
+            sys.exit(1)
+        else:
+            ## no usage plan
+            print(f"\t{Fore.CYAN}Creating usage plan {dmcmp.names.api_gateway_usage_plan_name}")
+            print(f"\tUsage plan name = '{dmcmp.names.api_gateway_usage_plan_name}, key id = '{ast.dm_computed.computed.apigateway_apikey_id}'")
+            results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__create_usage_plan', debug=debug, stdout=stdout)
+            if 'computed.returned' in results and results['computed.returned']:
+                returned = results['computed.returned']
+            else:
+                print(f"{Fore.RED}Error: results form refkey='gateway_setup.aws_apigateway__create_usage_plan' failed!")
+                sys.exit(1)
 
-    #     if name and create_date and _id and value:
-    #         ast.set_refkey('computed.apigateway_api_key_id', _id)
-    #         created_new_key = True
-    #         print(f"API KEY: '{value}'")
-    # else:
-    #
+        name = returned['name'] if 'name' in returned else None
+        _id = returned['id'] if 'id' in returned else None
+        apiStages = returned['apiStages'] if 'apiStages' in returned else []
+        if _id is not None and name == dmcmp.names.api_gateway_usage_plan_name:
+            print(f"\t{Style.DIM}api_gateway_usage_plan_name = {dmcmp.names.api_gateway_usage_plan_name}, apigateway_usage_plan_id = {_id}")
+            ast.set_refkey('computed.apigateway_usage_plan_id', _id)
+        else:
+            print(f"{Fore.RED}ERROR: Couldn't find usage plan id for {dmcmp.names.api_gateway_usage_plan_name}!")
+            sys.exit(1)
 
-        # if _id:
+        cur_api_stage_id = jmespath.search(f"[?apiId== '{ast.dm_computed.computed.rest_api_id}' && stage == '{dmcmp.names.apigateway_stage}'].apiId", apiStages)
+        if len(cur_api_stage_id) == 1:
+            print(f"\t{Style.DIM}Gateway API ID for Stage '{dmcmp.names.apigateway_stage}' = {ast.dm_computed.computed.rest_api_id} already associated with usage plan")
+        elif len(cur_api_stage_id) > 1:
+            print(f"{Fore.RED}ERROR: Too many idential usage plans keys returned! Aborting")
+            sys.exit(1)
+        else:
+            print(f"\tAdding API Gateway Stage '{dmcmp.names.apigateway_stage}' rest_api_id = {ast.dm_computed.computed.rest_api_id} to usage plan {ast.dm_computed.computed.apigateway_usage_plan_id}!")
+            ## Connect apigateway to this usage plan
+            results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__update_usage_plan', debug=debug, stdout=stdout)
 
-        # results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__create_usage_plan_key', debug=debug, stdout=stdout)
-        # pp.pprint(results)
-        # else:
-        #     print("")
+    ## 3) Assign our API key
+    results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__get_usage_plan_keys', debug=debug, stdout=stdout)
+    if 'computed.returned' in results and results['computed.returned']:
+        usage_plan_associated_api_key = jmespath.search(f"items[?id == '{ast.dm_computed.computed.apigateway_apikey_id}']", results['computed.returned'])
+    else:
+        usage_plan_associated_api_key = []
 
+    if len(usage_plan_associated_api_key) == 1:
+        print(f"\t{Style.DIM}apigateway_apikey_id = '{ast.dm_computed.computed.apigateway_apikey_id}' already associated with apigateway_usage_plan_id = {ast.dm_computed.computed.apigateway_usage_plan_id}")
+    else:
+        results = execute_cmd(ast, refkey='gateway_setup.aws_apigateway__create_usage_plan_key', debug=debug, stdout=stdout)
+        if 'computed.returned' in results and results['computed.returned']:
+            returned = results['computed.returned']
+            print(f"\t{Style.DIM}apigateway_apikey_id = '{ast.dm_computed.computed.apigateway_apikey_id}' is now associated with apigateway_usage_plan_id = {ast.dm_computed.computed.apigateway_usage_plan_id}")
 
 
 def main(ast: ActiveState, args: bool, parser: argparse.ArgumentParser):
