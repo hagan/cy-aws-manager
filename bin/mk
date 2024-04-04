@@ -117,12 +117,19 @@ function update_project() {
 }
 
 function load_registry() {
-  if docker ps -a --format json | jq -r '.Names' | grep -q 'registry' \
-    && docker ps -a --format json | jq -r '.State' | grep -q 'running'; then
+  if docker ps -a --format json | \
+     jq -r 'select(.Names == "registry" and .State == "running")' | \
+     grep -q 'registry'; then
+    echo "Docker registry container is already running"
     exit 0
-  elif docker ps -a --format json | jq -r '.Names' | grep -q 'registry'; then
-    docker restart registry
+  elif docker ps -a --format json | \
+     jq -r 'select(.Names == "registry" and .State == "exited")' | \
+     grep -q 'registry'; then
+    echo "Starting registry...."
+    docker start registry
+    exit 0
   else
+    echo "Setting up docker registry container."
     docker run -d -p 5000:5000 --name registry registry:2
   fi
 }
@@ -462,14 +469,15 @@ while getopts "fnshkiap:" opt; do
             ;;
     esac
 done
-
 # Loop through arguments and process them
 case $command in
   help)
     show_help
     ;;
   registry)
+    echo "got here"
     load_registry
+    echo "and here"
     ;;
   update)
     update_project
@@ -552,6 +560,7 @@ case $command in
     ;;
   *)
     # Ignore unknown options / handle error
+    echo "$command is not a command"
     exit 1
     ;;
 esac

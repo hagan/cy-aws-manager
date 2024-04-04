@@ -74,9 +74,10 @@ def zip_lambda_func(ast: dict, debug: bool = False, stdout: bool = False, info: 
     print(f"lambda code path: {lambda_code_path}")
     files = lambda_code_path.glob('*')
 
-    token = secrets.token_urlsafe(64)
-    with open(f'{ast.dm.paths.lambda_func_dir}/token.txt', 'w') as file:
-        file.write(token)
+    ## disabled authorizer, token unecessary
+    # token = secrets.token_urlsafe(64)
+    # with open(f'{ast.dm.paths.lambda_func_dir}/token.txt', 'w') as file:
+    #     file.write(token)
 
     ## maybe use a py lib instead?
     with zipfile.ZipFile(f'{ast.dm.paths.tmp_dir}/function.zip', 'w') as zip_ref:
