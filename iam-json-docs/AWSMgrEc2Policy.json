@@ -26,7 +26,8 @@
         "ec2:DescribeSnapshots",
         "ec2:CreateTags",
         "ec2:DeleteTags",
-        "ec2:GetConsoleOutput"
+        "ec2:GetConsoleOutput",
+        "ec2:AuthorizeSecurityGroupIngress"
       ],
       "Resource": "*"
     }

@@ -14,7 +14,7 @@ LATEST_AWSMGR_DKR_DIR ?= ./src/vice/dockerhub/awsmgr/latest
 LATEST_VICE_DKR_DIR ?= ./src/vice/latest
 
 PYNODE_PARENT_IMAGE := python
-PYNODE_PARENT_TAG := 3.11.8-bookworm
+PYNODE_PARENT_TAG := 3.11.9-bookworm
 
 PYNODE_DKR_VERSION ?= $(shell readlink $(LATEST_PYNODE_DKR_DIR) | grep -oP '(^.*/)?\K[^/]+(?=/?$$)')
 PYNODE_DKR_DIR ?= "./$(shell realpath --relative-to=. $(LATEST_PYNODE_DKR_DIR))"
@@ -148,7 +148,10 @@ DKR_ENV_OPTIONS := \
 			--env AWS_SECRET_ACCESS_KEY \
 			--env AWS_SESSION_TOKEN \
 			--env AWS_DEFAULT_REGION \
-			--env AWS_CREDENTIAL_EXPIRATION
+			--env AWS_CREDENTIAL_EXPIRATION \
+			--env APIGATEWAY_NAME \
+			--env APIGATEWAY_API_KEY_NAME \
+			--env APIGATEWAY_STAGE
 # --env SKIP_AUTH_TEST=true
 
 # No files are created

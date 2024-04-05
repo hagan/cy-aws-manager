@@ -1,0 +1,15 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": "apigateway:GET",
+            "Resource": [
+                "arn:aws:apigateway:*::/restapis/*",
+                "arn:aws:apigateway:*::/restapis",
+                "arn:aws:apigateway:us-west-2::/apikeys/*",
+                "arn:aws:apigateway:us-west-2::/apikeys"
+            ]
+        }
+    ]
+}

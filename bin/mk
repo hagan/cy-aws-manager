@@ -243,6 +243,8 @@ function setup_iam_step_4() {
   aws iam create-policy --policy-name AWSMgrLambdaPolicy --policy-document file://${JSON_FILE} $@
 }
 
+## Need to add -> AWSMgrAPIGatewayPolicy
+
 function setup_iam_step_5() {
   JSON_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrAssumeRolePolicy.json"
   TEMP_FILE="${PRJ_ROOT_DIR}/trashbin/temp.json"
