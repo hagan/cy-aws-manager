@@ -55,6 +55,7 @@ function show_help() {
   mk <COMMAND> <FLAGS>
 
   COMMANDS
+    help                    - help
     registry                - create/start local registry
     update                  - Update this repo and submodule
     pynode                  - Build/run the pynode Docker image
@@ -78,6 +79,7 @@ function show_help() {
     test-regen - Regenerate using temporary tokens
 
   FLAGS
+    -h/--help            - help
     -f/--rebuild-flask   - Builds flask wheel package in dist for awsmgr/vice images
     -n/--rebuild-node    - Builds NextJS tgz package in dist for awsmgr/vice images
     -s/--shell           - load shell for pynode/pulumi/awsmgrvice ie 'mk pynode -s'
@@ -371,6 +373,10 @@ function test_regen() {
 
 for arg in "$@"; do
   case $arg in
+    --help)
+      show_help
+      exit 0
+      ;;
     --rebuild-flask)
       rebuild_flask=true
       shift
@@ -430,8 +436,12 @@ for arg in "$@"; do
 done
 
 # Now, handle short options
-while getopts "fnshkiap:" opt; do
+while getopts "hfnshkiap:" opt; do
     case ${opt} in
+        h)
+            show_help
+            exit 0
+            ;;
         f)
             rebuild_flask=true
             ;;
@@ -475,6 +485,7 @@ done
 case $command in
   help)
     show_help
+    exit 0
     ;;
   registry)
     echo "got here"
