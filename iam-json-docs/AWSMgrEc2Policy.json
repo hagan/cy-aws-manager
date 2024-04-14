@@ -16,6 +16,7 @@
         "ec2:ModifyInstanceAttribute",
         "ec2:DescribeVolumes",
         "ec2:DescribeInstanceTypes",
+        "ec2:DescribeImages",
         "ec2:DescribeTags",
         "ec2:DescribeInstanceAttribute",
         "ec2:DescribeInstanceCreditSpecifications",

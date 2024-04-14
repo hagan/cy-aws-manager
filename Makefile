@@ -484,7 +484,7 @@ shell-node-vice-image:
 build-node-app:
 	@echo "Compile/build package for Express/NextJS"
 	$(NODE_DIR)/build.sh
-
+#
 reload-vice-node-app: $(NODEBUILD)
 	@if [ -z "$(NODE_TGZ_APP)" ]; then (echo "NODE_TGZ_APP is unset or empty" && exit 1); fi
 	@echo "Building viceawsmg $(VICE_DKR_VERSION) image"
@@ -493,11 +493,10 @@ reload-vice-node-app: $(NODEBUILD)
 	@docker ps --filter "name=vice" | grep vice >/dev/null 2>&1 \
 	&& docker cp $(NODE_TGZ_APP) vice:/mnt/dist/npms \
 	&& docker cp $(VICE_DKR_DIR)/package/usr/local/bin/update-npm.sh vice:/usr/local/bin/update-npm.sh \
-	&& docker exec -it vice /bin/sh -c 'su - node -c /usr/local/bin/update-npm.sh'
-#  \
-# || { echo "Error while updating package!"; exit 1; } \
-# && docker exec -it vice /bin/sh -c 'supervisorctl restart express' \
-# || { echo "ERROR: trying to restart express"; exit 1; }
+	&& docker exec -it vice /bin/sh -c 'su - node -c /usr/local/bin/update-npm.sh' \
+	|| { echo "Error while updating package!"; exit 1; } \
+	&& docker exec -it vice /bin/sh -c 'supervisorctl restart express' \
+	|| { echo "ERROR: trying to restart express"; exit 1; }
 
 compile:
 	@echo "Building flask wheel... $(NVM_DIR)"

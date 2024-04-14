@@ -74,6 +74,7 @@ function show_help() {
     iam-3  - Create IAM Policy for VPC
     iam-4  - Create IAM Policy for Lambda
     iam-5  - Create IAM Policy for AssumeRole
+    iam-5b - Create IAM Policy for IAM lol
     iam-6  - Create IAM Role AWSMgrRole linking policies for S3, EC2, VPC and Lambda
     iam-7  - Generate Temporary Session Token for AWSMgrRole
     test-regen - Regenerate using temporary tokens
@@ -265,6 +266,24 @@ function setup_iam_step_5() {
   rm ${TEMP_FILE}
 }
 
+function setup_iam_step_5b() {
+  JSON_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrIAMPolicy.json"
+  TEMP_FILE="${PRJ_ROOT_DIR}/trashbin/temp.json"
+  if [[ ! -f ${JSON_FILE} ]]; then
+    >&2 echo "ERROR: '${JSON_FILE}' is missing!"
+    exit 1
+  fi
+  if [[ -f ${TEMP_FILE} ]]; then
+    >&2 echo "ERROR: '${TEMP_FILE}' exists!"
+    exit 1
+  fi
+  account_id=$(get_aws_account_id $@)
+  sed "s/\${account_id}/${account_id}/g" ${JSON_FILE} > ${TEMP_FILE}
+  echo "Creating IAM policy from file '${TEMP_FILE}'"
+  aws iam create-policy --policy-name AWSMgrIAMPolicy --policy-document file://${TEMP_FILE} $@
+  rm ${TEMP_FILE}
+}
+
 function setup_iam_step_6() {
   JSON_FILE="${PRJ_ROOT_DIR}/iam-json-docs/AWSMgrRole.json"
   TEMP_FILE="${PRJ_ROOT_DIR}/trashbin/temp.json"
@@ -297,6 +316,8 @@ function setup_iam_step_6() {
     --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrLambdaPolicy $@ || exit 1
   aws iam attach-role-policy --role-name AWSMgrRole \
     --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrAssumeRolePolicy $@ || exit 1
+  aws iam attach-role-policy --role-name AWSMgrRole \
+    --policy-arn arn:aws:iam::${account_id}:policy/AWSMgrIAMPolicy $@ || exit 1
 
   rm ${TEMP_FILE}
 }
@@ -554,6 +575,10 @@ case $command in
     ;;
   iam-5)
     setup_iam_step_5 "${_AWSPROFILENAME}"
+    exit $?
+    ;;
+  iam-5b)
+    setup_iam_step_5b "${_AWSPROFILENAME}"
     exit $?
     ;;
   iam-6)
