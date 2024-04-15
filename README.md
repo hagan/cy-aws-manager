@@ -58,12 +58,19 @@ To add a file:
 
 ## Compiling docker images
 
-#### Setup our builder environment
+#### Setup our registry & build environment
 
+```
+  # create
   docker run -d -p 5000:5000 --name registry registry:latest
+  # relaunch
+  docker start -a registry
+  # setup builder
   docker buildx create --name mybuilder --use
   docker buildx inspect --bootstrap
+  # login (to push images into hub.docker.com)
   docker login
+```
 
 #### Create images for hub
 
